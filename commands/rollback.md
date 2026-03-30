@@ -4,18 +4,29 @@ Undo a previous forgeplan generation for WP ID from the arguments.
 
 ## Step 1: Find the Run
 
-Read `logs/run-summary.jsonl` and find the entry matching the WP ID:
+Read `logs/run-summary.jsonl` and find the most recent entry matching the WP ID:
 ```bash
 grep "\"wp_id\":${WP_ID}" logs/run-summary.jsonl | tail -1
 ```
 
-Extract: `branch`, `pr_url`, `result`.
+Parse the entry. Handle two formats:
 
-If no entry found, ask the user for the branch name manually.
+**Multi-layer format** (v2):
+```json
+{"wp_id": 123, "result": "SUCCESS", "layers": [{"name": "backend", "branch": "...", "pr_url": "...", "result": "SUCCESS"}, ...]}
+```
 
-## Step 2: Close the PR
+**Legacy single-layer format** (v1):
+```json
+{"wp_id": 123, "result": "SUCCESS", "branch": "...", "pr_url": "..."}
+```
+Convert legacy to multi-layer: `[{"name": "unknown", "branch": "...", "pr_url": "..."}]`
 
-If `pr_url` is set:
+If no entry found, ask the user for the branch name(s) manually.
+
+## Step 2: Close PRs (per layer)
+
+For each layer entry with a `pr_url`:
 
 ### GitHub
 ```bash
@@ -29,9 +40,13 @@ glab mr close <MR_ID> --comment "Rolled back by forgeplan"
 
 If the CLI tool is not available, print the URL and ask the user to close it manually.
 
-## Step 3: Delete the Branch
+## Step 3: Delete Branches (per layer)
+
+For each layer entry, determine the repo root (from `layerOverrides.<name>.repoRoot` in config, or project root):
 
 ```bash
+cd <repo_root>
+
 # Delete remote branch
 git push origin --delete "${BRANCH}"
 
@@ -51,9 +66,8 @@ Load config and update the WP status back to `pickup_status`:
 WP_JSON=$(curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
   "${OP_BASE_URL}/api/v3/work_packages/${WP_ID}")
 LOCK_VERSION=$(echo "$WP_JSON" | jq '.lockVersion')
-PICKUP_STATUS_ID=$(jq '.statuses._status_ids[.statuses.pickup_status]' forgeplan.config.json)
 
-# Update status
+# Update status back to pickup
 curl -s -u "apikey:${OP_API_KEY}" \
   -H "Content-Type: application/json" -H "Accept: application/hal+json" \
   -X PATCH \
@@ -67,7 +81,7 @@ curl -s -u "apikey:${OP_API_KEY}" \
 curl -s -u "apikey:${OP_API_KEY}" \
   -H "Content-Type: application/json" -H "Accept: application/hal+json" \
   -X POST \
-  --data '{"comment":{"raw":"Forgeplan rollback: Code generation reverted. Branch and PR deleted."}}' \
+  --data '{"comment":{"raw":"## forgeplan Rollback\n\nCode generation reverted. Branch(es) and PR(s) deleted."}}' \
   "${OP_BASE_URL}/api/v3/work_packages/${WP_ID}/activities"
 ```
 

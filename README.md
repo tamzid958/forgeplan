@@ -2,7 +2,7 @@
 
 **Forge Code from Plans** — Turn OpenProject work packages into production code using Claude Code.
 
-Forgeplan is a Claude Code skill that connects to your OpenProject instance, reads a work package (bug, feature, epic, etc.), gathers full context (hierarchy, relations, comments, codebase structure), generates production code, and handles the entire git workflow: branch, commit, push, and PR creation — with a summary posted back to OpenProject.
+Forgeplan is a Claude Code skill that connects to your OpenProject instance, reads a work package (bug, feature, epic, etc.), gathers full context (hierarchy, siblings, relations, comments, codebase structure), generates production code across one or more layers, and handles the entire git workflow: branch, commit, push, and PR creation — with a summary posted back to OpenProject.
 
 ---
 
@@ -12,18 +12,25 @@ Forgeplan is a Claude Code skill that connects to your OpenProject instance, rea
 OpenProject Work Package
         │
         ▼
-  ┌─────────────┐
-  │  /forgeplan  │ ← Claude Code skill
-  │              │
-  │  1. Fetch WP │──── OpenProject API (curl)
-  │  2. Gather   │
-  │     context  │──── hierarchy, relations, comments, codebase
-  │  3. Generate │
-  │     code     │──── Claude Code writes files directly
-  │  4. Git      │──── branch, commit, push
-  │  5. PR       │──── gh / glab CLI
-  │  6. Feedback │──── status update + comment on WP
-  └─────────────┘
+  ┌─────────────────┐
+  │   /forgeplan     │ ← Claude Code skill
+  │                  │
+  │  1. Fetch WP     │──── OpenProject API
+  │  2. Gather       │
+  │     context      │──── hierarchy, siblings, relations, comments
+  │  3. Route to     │
+  │     layer(s)     │──── category, tags, description keywords
+  │  4. Per-layer:   │
+  │     ┌──────────┐ │
+  │     │ Generate  │ │──── Claude Code writes files
+  │     │ Lint/Fmt  │ │──── auto-fix before commit
+  │     │ Test      │ │──── full suite + transitive fix
+  │     │ Commit    │ │──── sanitized message
+  │     │ Push + PR │ │──── gh / glab CLI
+  │     └──────────┘ │
+  │  5. Cross-link   │──── PR ↔ PR references
+  │  6. Feedback     │──── status + comment on WP
+  └─────────────────┘
 ```
 
 ---
@@ -74,43 +81,17 @@ Open Claude Code in your project and type:
 /forgeplan init
 ```
 
-This walks you through an interactive setup:
+This walks you through interactive setup:
 
-1. **OpenProject connection** — URL, API key, project slug → creates `.env` (secrets only)
-2. **Layer paths** — comma-separated paths (e.g., `backend,mobile-app` or `.`) → layer names derived from paths
-3. **Optional settings** — PR reviewers, Claude model, validation command
-4. **Config generation** — builds `forgeplan.config.json` with all layers and auto-detected tech stack
-5. **CLAUDE.md** — generated per repo by analyzing each codebase
-6. **.gitignore** — updated per repo
-7. **Status mapping** — connects to OpenProject, discovers statuses, maps pipeline events
-
-Example session:
-
-```
-OpenProject URL: https://op.mycompany.com
-OpenProject API key: opapi-xxxxxxxxxxxx
-Default project slug: my-project
-
-✅ .env created
-
-Layer paths [.]: backend,mobile-app
-
-✅ forgeplan.config.json created with 2 layer(s)
-  - backend: backend (ASP.NET 8, C#, Entity Framework Core)
-  - mobile-app: mobile-app (Flutter 3, Dart)
-
-✅ CLAUDE.md created in backend/
-✅ CLAUDE.md created in mobile-app/
-
-Status mapping:
-  pickup_status     → TO DO
-  in_progress       → IN PROGRESS
-  success_status    → IN REVIEW
-  partial_status    → IN PROGRESS
-  failure_status    → (no change)
-
-✅ Project initialized.
-```
+1. **OpenProject connection** — URL, API key, project slug → creates `.env`
+2. **Layer paths** — comma-separated (e.g., `backend,frontend` or `.`)
+3. **Repo detection** — auto-detects if layers live in separate git repos
+4. **Toolchain discovery** — finds `dotnet`, `node`, `flutter`, etc. even if off-PATH
+5. **Hook detection** — reads lefthook/husky/pre-commit config for branch naming, commit rules, test parity
+6. **Test/lint/format commands** — auto-detected per layer from package.json, *.csproj, etc.
+7. **Config generation** — builds `forgeplan.config.json` (shared) + `forgeplan.local.json` (machine-specific)
+8. **CLAUDE.md** — generated per repo by analyzing each codebase
+9. **Status mapping** — connects to OpenProject, discovers statuses, maps pipeline events
 
 ### Step 2: Verify setup
 
@@ -121,7 +102,7 @@ Status mapping:
 ### Step 3: Process a work package
 
 ```
-/forgeplan wp 16500
+/forgeplan wp 123
 ```
 
 ---
@@ -131,23 +112,31 @@ Status mapping:
 ### Process a single work package
 
 ```
-/forgeplan wp 16500
+/forgeplan wp 123
 ```
 
-What happens:
-1. Fetches WP #16500 from OpenProject (description, hierarchy, relations, comments)
-2. Sets status to "IN PROGRESS"
-3. Creates branch `feature/WP-16500-fix-clone-validation-bug`
-4. Reads CLAUDE.md and applies type-specific generation rules
-5. Generates code directly (Claude Code writes the files)
-6. Runs validation command (if configured)
-7. Commits, pushes, creates PR
-8. Updates WP status and posts a summary comment
+### Dry run (preview without side effects)
+
+```
+/forgeplan wp 123 --dry-run
+```
+
+Shows target layers, branch name, and base branches without generating code or touching git/OpenProject.
+
+### List work packages
+
+```
+/forgeplan list                  # current sprint, top 50
+/forgeplan list --sprint "S-12"  # specific sprint
+/forgeplan list 123              # WP detail with parent, siblings, children, relations
+```
+
+Sprint view shows a table with priority, type, status, assignee, and layer. Your assigned WPs appear first. Detail view shows the full hierarchy tree.
 
 ### Process multiple work packages
 
 ```
-/forgeplan batch 16500,16501,16502
+/forgeplan batch 123,124,125
 ```
 
 Processes each WP sequentially. Prints a summary at the end.
@@ -158,17 +147,17 @@ Processes each WP sequentially. Prints a summary at the end.
 /forgeplan queue
 ```
 
-Auto-discovers all WPs with `pickup_status` (e.g., "TO DO"), sorted by priority, and processes them one by one.
+Auto-discovers WPs with `pickup_status`. Shows assigned-to-you WPs first, then unassigned. Displays the queue and lets you choose which to process.
 
 ### Rollback
 
 ```
-/forgeplan rollback 16500
+/forgeplan rollback 123
 ```
 
-Undoes a previous generation:
-- Closes the PR
-- Deletes the remote and local branch
+Undoes a previous generation across all layers:
+- Closes PR(s)
+- Deletes remote and local branch(es)
 - Reverts the WP status in OpenProject
 - Posts a rollback comment
 
@@ -178,93 +167,117 @@ Undoes a previous generation:
 /forgeplan doctor
 ```
 
-Checks dependencies, config files, OpenProject connectivity, git repos, and auth status.
+Checks dependencies, config files, toolchain, OpenProject connectivity, git repos, hooks, and auth status.
 
 ---
 
 ## Configuration
 
-### .env (secrets only)
+### Two-file config system
 
-The `.env` file stores **only secrets** — never committed to git.
+| File | Purpose | Git |
+|------|---------|-----|
+| `forgeplan.config.json` | Shared project config (layers, routing, statuses, reviewers) | Committed |
+| `forgeplan.local.json` | Machine-specific (toolPaths, hookConventions, layer overrides) | Gitignored |
+| `.env` | Secrets only (`OP_API_KEY`) | Gitignored |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OP_API_KEY` | Yes | OpenProject API token |
-| `CLAUDE_MODEL` | No | Claude model alias or ID (default: `sonnet`) |
-| `VALIDATION_CMD` | No | Command to run after generation (e.g., `npm run build`) |
+`forgeplan.local.json` is deep-merged on top of `forgeplan.config.json` at load time. The `init` command generates both files.
 
 ### forgeplan.config.json
 
-All project config lives here. Generated by `/forgeplan init`.
+```json
+{
+  "openproject": { "url": "https://op.example.com", "projectId": "my-project" },
+  "layers": {
+    "backend": { "path": "src/backend", "techStack": "dotnet", "filePatterns": ["**/*.cs"], "buildCmd": "dotnet build" },
+    "frontend": { "path": "src/frontend", "techStack": "nextjs", "filePatterns": ["**/*.tsx"], "buildCmd": "npm run build" }
+  },
+  "routing": {
+    "field": "category",
+    "map": { "Backend": "backend", "Frontend": "frontend", "Full-Stack": ["backend", "frontend"] },
+    "defaultLayer": "backend",
+    "fallbackHeuristics": {
+      "subjectTagPattern": "\\[([A-Za-z-]+)\\]",
+      "descriptionKeywords": { "backend": ["api", "endpoint"], "frontend": ["component", "modal"] }
+    }
+  },
+  "reviewers": [],
+  "statuses": { "pickup_status": 1, "in_progress_status": 7, "success_status": 19, "partial_status": 7, "failure_status": 0 },
+  "commitTrailer": null
+}
+```
+
+### forgeplan.local.json
 
 ```json
 {
-  "openproject": {
-    "url": "https://op.example.com",
-    "projectId": "my-project"
+  "toolPaths": { "dotnet": "~/.dotnet/dotnet" },
+  "hookConventions": {
+    "manager": "lefthook",
+    "branchFormat": "{type}/WP-{id}-{slug}",
+    "commitSubjectMaxLength": 72,
+    "testParityRequired": true,
+    "testFilePattern": "__tests__/{path}/{name}.test.{ext}"
   },
-  "layers": {
-    "backend": {
-      "path": "src/backend",
-      "techStack": "ASP.NET 8, C#, Entity Framework Core",
-      "filePatterns": ["**/*.cs", "**/*.csproj"],
-      "buildCmd": "dotnet build"
-    },
-    "frontend": {
-      "path": "src/frontend",
-      "techStack": "Next.js 14, TypeScript, Tailwind CSS",
-      "filePatterns": ["**/*.tsx", "**/*.ts"],
-      "buildCmd": "npm run build"
-    }
-  },
-  "routingField": "category",
-  "routingMap": {
-    "Backend": "backend",
-    "Frontend": "frontend",
-    "Full-Stack": ["backend", "frontend"]
-  },
-  "defaultLayer": "backend",
-  "reviewers": ["alice", "bob"],
-  "hooks": {},
-  "statuses": {
-    "pickup_status": "TO DO",
-    "in_progress_status": "IN PROGRESS",
-    "success_status": "IN REVIEW",
-    "partial_status": "IN PROGRESS",
-    "failure_status": null,
-    "_status_ids": {
-      "TO DO": 3,
-      "IN PROGRESS": 4,
-      "IN REVIEW": 5,
-      "DONE": 7
-    }
+  "layerOverrides": {
+    "backend": { "repoRoot": "/path/to/backend-repo", "testCmd": "dotnet test", "lintFixCmd": "dotnet format" },
+    "frontend": { "repoRoot": "/path/to/frontend-repo", "testCmd": "npm run test:coverage", "formatCmd": "npx prettier --write ." }
   }
 }
 ```
 
-| Section | What It Does |
-|---------|-------------|
-| **`openproject`** | OpenProject URL and project ID (per-layer override supported) |
-| **`layers`** | Maps parts of your codebase — path, tech stack, file patterns, build command |
-| **`routingField`** | WP field used to route to layers (default: `category`) |
-| **`routingMap`** | Maps field values to layer names |
-| **`defaultLayer`** | Fallback layer when routing doesn't match |
-| **`reviewers`** | PR reviewer usernames |
-| **`hooks`** | Custom scripts at pipeline stages |
-| **`statuses`** | OpenProject status mappings |
+---
 
-### CLAUDE.md
+## Multi-Repo Support
 
-Generated per repo during `/forgeplan init`. This is the most important file for generation quality — it tells Claude Code your project's conventions.
+Forgeplan handles monorepos and multi-repo setups. If your layers live in separate git repos, `init` detects this and stores each layer's `repoRoot` in `forgeplan.local.json`. During `wp` processing, each layer gets its own branch, commit, push, and PR in its respective repo. PRs are cross-linked automatically.
 
-**Tip:** Review and refine it. The more specific, the better the generated code.
+---
 
-### What is a "layer"?
+## Hook Integration
 
-A layer is a part of your codebase (backend, frontend, mobile, etc.). Each layer maps to a directory path — the name is derived from the last segment (e.g., `src/backend` → `backend`, `mobile-app` → `mobile-app`, `.` → `app`).
+Forgeplan reads your git hook configuration (lefthook, husky, pre-commit) during `init` and stores conventions in `forgeplan.local.json`. During code generation:
 
-Forgeplan uses the work package's category (or another field) to route to the correct layer.
+1. **Branch names** follow your hook's naming rules
+2. **Commit messages** are sanitized to fit your format and length limits
+3. **Formatting and linting** are auto-fixed before committing
+4. **Test parity** — if your hooks require test files for new source files, forgeplan generates them alongside
+
+---
+
+## Pipeline Steps
+
+When you run `/forgeplan wp <ID>`:
+
+```
+ 1. Load config (shared + local + .env)
+ 2. Resolve tool paths
+ 3. Fetch WP + context (hierarchy, siblings, relations, comments)
+ 4. Determine target layer(s) via routing + fallback heuristics
+ 5. Quality gate (reject empty descriptions)
+ 6. Claim assignee + set WP status → IN PROGRESS
+ 7. Derive branch name from WP type + hook conventions
+ 8. Per-layer loop:
+    8a. Git preflight + branch (resume if exists)
+    8b. Generate code + tests
+    8c. Auto-fix formatting/lint + pre-commit dry run
+    8d. Run full test suite (fix transitive breakage)
+    8e. Validate build
+    8f. Sanitize commit message + commit
+    8g. Push
+    8h. Create PR
+ 9. Cross-link PRs across layers
+10. Update OpenProject status + post summary comment
+11. Log to run-summary.jsonl
+```
+
+### Result Types
+
+| Result | What Happened | Git | WP Status |
+|--------|--------------|-----|-----------|
+| **SUCCESS** | Code generated, all checks passed | Commit + push + PR | `success_status` |
+| **PARTIAL** | Code generated, some checks failed | `[WIP]` commit + push + PR | `partial_status` |
+| **FAILURE** | No code generated | No commit | `failure_status` |
 
 ---
 
@@ -281,51 +294,7 @@ Forgeplan applies type-specific rules based on the WP type:
 | **User Story** | User-facing behavior |
 | **Subtask** | Scoped to subtask boundaries only |
 
-Rules are in `.claude/skills/forgeplan/prompts/`. Customize them to change generation behavior.
-
----
-
-## Pipeline Steps
-
-When you run `/forgeplan wp <ID>`:
-
-```
- 1. Load config (.env + forgeplan.config.json)
- 2. Fetch WP from OpenProject API
- 3. Gather context (hierarchy, children, relations, comments)
- 4. Determine target layer via routing
- 5. Quality gate (reject empty descriptions)
- 6. Set WP status → IN PROGRESS
- 7. Create git branch: feature/WP-<ID>-<slug>
- 8. Generate code (Claude Code writes files directly)
- 9. Run validation (buildCmd or VALIDATION_CMD)
-10. Commit changes
-11. Push branch
-12. Create PR (gh/glab)
-13. Update WP status + post summary comment
-14. Log to run-summary.jsonl
-```
-
-### Result Types
-
-| Result | What Happened | Git | WP Status |
-|--------|--------------|-----|-----------|
-| **SUCCESS** | Code generated, validation passed | Commit + push + PR | `success_status` |
-| **PARTIAL** | Code generated, validation failed | `[WIP]` commit + push + PR | `partial_status` |
-| **FAILURE** | No code generated | No commit | `failure_status` |
-
----
-
-## Auto-Derived Configuration
-
-These values are derived automatically — no config needed:
-
-| Value | Source |
-|-------|--------|
-| Repo slug (`org/repo`) | `git remote get-url origin` |
-| Git host type (github/gitlab) | Parsed from remote URL |
-| Base branch | `git symbolic-ref refs/remotes/origin/HEAD` |
-| Auth token | `gh auth token` / `glab auth status` |
+Rules are in `prompts/`. Customize them to change generation behavior.
 
 ---
 
@@ -333,26 +302,27 @@ These values are derived automatically — no config needed:
 
 ```
 forgeplan/
-  SKILL.md                    # Dispatcher + config loading + API reference
+  SKILL.md                        # Dispatcher + config loading + API reference
   commands/
-    wp.md                     # Core 14-step WP processing pipeline
-    batch.md                  # Process multiple WPs
-    queue.md                  # Auto-discover ready WPs
-    init.md                   # Interactive project setup
-    rollback.md               # Undo a generation
-    doctor.md                 # Health check
+    wp.md                         # Core multi-layer WP pipeline
+    list.md                       # List sprint WPs / WP detail with hierarchy
+    batch.md                      # Process multiple WPs
+    queue.md                      # Auto-discover ready WPs (assigned first)
+    init.md                       # Interactive project setup + discovery
+    rollback.md                   # Undo a generation (multi-layer)
+    doctor.md                     # Health check
+    help.md                       # Command reference
   prompts/
-    task-rules.md             # Default generation rules
-    bug-rules.md              # Bug fix rules
-    feature-rules.md          # Feature rules
-    epic-rules.md             # Epic/scaffold rules
-    story-rules.md            # User story rules
-    subtask-rules.md          # Subtask rules
-  forgeplan.config.json.example
+    task-rules.md                 # Default generation rules
+    bug-rules.md                  # Bug fix rules
+    feature-rules.md              # Feature rules
+    epic-rules.md                 # Epic/scaffold rules
+    story-rules.md                # User story rules
+    subtask-rules.md              # Subtask rules
+  forgeplan.config.json.example   # Shared config template
+  forgeplan.local.json.example    # Local config template
   README.md
 ```
-
-Install to `.claude/skills/forgeplan/` (project) or `~/.claude/skills/forgeplan/` (global).
 
 ---
 
@@ -360,43 +330,50 @@ Install to `.claude/skills/forgeplan/` (project) or `~/.claude/skills/forgeplan/
 
 | Command | Description |
 |---------|-------------|
-| `/forgeplan init` | Interactive project setup |
-| `/forgeplan doctor` | Health check diagnostic |
-| `/forgeplan wp <ID>` | Process a single work package |
+| `/forgeplan help` | Show all commands and usage |
+| `/forgeplan init` | Interactive project setup + toolchain/hook discovery |
+| `/forgeplan doctor` | Health check (config, tools, connectivity, hooks) |
+| `/forgeplan list` | List WPs for current sprint (top 50, yours first) |
+| `/forgeplan list --sprint "S-12"` | List WPs for a specific sprint |
+| `/forgeplan list <ID>` | Show WP details with parent, siblings, children, relations |
+| `/forgeplan wp <ID>` | Process a single work package (multi-layer) |
+| `/forgeplan wp <ID> --dry-run` | Preview routing and branch without side effects |
 | `/forgeplan batch <ID,ID,ID>` | Process multiple WPs sequentially |
-| `/forgeplan queue` | Auto-discover and process all ready WPs |
-| `/forgeplan rollback <ID>` | Undo: close PR, delete branch, revert status |
+| `/forgeplan queue` | Auto-discover and process ready WPs (assigned first) |
+| `/forgeplan rollback <ID>` | Undo: close PR(s), delete branch(es), revert status |
 
 ---
 
 ## Troubleshooting
 
 ### "OP_API_KEY not found"
-
 Create a `.env` file with your API key, or run `/forgeplan init`.
 
 ### "forgeplan.config.json not found"
-
 Run `/forgeplan init` to generate it.
 
-### "Cannot reach OpenProject"
+### "forgeplan.local.json not found"
+Run `/forgeplan init` to detect toolchain and hook conventions.
 
+### "Tool 'dotnet' not found"
+The tool isn't on PATH. Set `toolPaths.dotnet` in `forgeplan.local.json` or run `/forgeplan init` to re-detect.
+
+### "Cannot reach OpenProject"
 Check `openproject.url` in `forgeplan.config.json`. Verify the server is reachable.
 
 ### "Authentication failed"
-
 Your `OP_API_KEY` is invalid or expired. Generate a new one in OpenProject → My Account → Access Tokens.
 
-### "No auth token for PR creation"
+### "Commit blocked by hook"
+Forgeplan auto-fixes formatting/lint and retries up to 3 times. If still failing, check the hook output for the specific rule violation. Run `/forgeplan init` to re-detect hook conventions.
 
+### "No auth token for PR creation"
 Run `gh auth login` (GitHub) or `glab auth login` (GitLab).
 
 ### Claude generates wrong code
-
 Improve your `CLAUDE.md` with more specific conventions. Use `/forgeplan rollback <ID>` to undo.
 
 ### Checking logs
-
 ```bash
 cat logs/run-summary.jsonl | jq .
 ```

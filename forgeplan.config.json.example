@@ -6,36 +6,40 @@
   "layers": {
     "backend": {
       "path": "src/backend",
-      "techStack": "ASP.NET 8, C#, Entity Framework Core",
+      "techStack": "dotnet",
       "filePatterns": ["**/*.cs", "**/*.csproj"],
       "buildCmd": "dotnet build"
     },
     "frontend": {
       "path": "src/frontend",
-      "techStack": "Next.js 14, TypeScript, Tailwind CSS",
+      "techStack": "nextjs",
       "filePatterns": ["**/*.tsx", "**/*.ts"],
-      "buildCmd": "npm run build",
-      "openproject": {
-        "projectId": "frontend-project"
+      "buildCmd": "npm run build"
+    }
+  },
+  "routing": {
+    "field": "category",
+    "map": {
+      "Backend": "backend",
+      "Frontend": "frontend",
+      "Full-Stack": ["backend", "frontend"]
+    },
+    "defaultLayer": "backend",
+    "fallbackHeuristics": {
+      "subjectTagPattern": "\\[([A-Za-z-]+)\\]",
+      "descriptionKeywords": {
+        "backend": ["api", "endpoint", "controller", "database", "migration", "service"],
+        "frontend": ["component", "page", "modal", "ui", "css", "style", "form"]
       }
     }
   },
-  "routingField": "category",
-  "routingMap": {
-    "Backend": "backend",
-    "Frontend": "frontend",
-    "Full-Stack": ["backend", "frontend"]
-  },
-  "defaultLayer": "backend",
-  "reviewers": ["alice", "bob"],
-  "hooks": {},
+  "reviewers": [],
   "statuses": {
-    "_comment": "Run 'forgeplan --remap-statuses' to populate this section",
     "pickup_status": null,
     "in_progress_status": null,
     "success_status": null,
     "partial_status": null,
-    "failure_status": null,
-    "_status_ids": {}
-  }
+    "failure_status": null
+  },
+  "commitTrailer": null
 }

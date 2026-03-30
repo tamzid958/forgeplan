@@ -1,10 +1,10 @@
 # Process a Single Work Package
 
-Process WP ID from the arguments. Follow this pipeline exactly in order.
+Process WP ID from the arguments. Parse optional `--dry-run` flag. Follow this pipeline exactly in order.
 
 ## Step 1: Load Configuration
 
-Load `.env` and `forgeplan.config.json` as described in the main SKILL.md. Extract all required values.
+Load `.env`, `forgeplan.config.json`, and `forgeplan.local.json` as described in the main SKILL.md. Validate config. Resolve tool paths.
 
 ## Step 2: Fetch Work Package
 
@@ -22,6 +22,7 @@ Extract and remember:
 - `description.raw` → full description text
 - `_links.category.title` → category (for layer routing)
 - `_links.parent.href` → parent WP link (if any)
+- `_links.assignee.href` → current assignee (if any)
 
 ## Step 3: Fetch Context
 
@@ -30,8 +31,13 @@ Gather all context in parallel where possible:
 ### Parent hierarchy
 If the WP has a parent, fetch it. If the parent also has a parent, fetch that too (max 2 levels up).
 
+### Siblings (shallow)
+If the WP has a parent, extract `_links.children[]` from the parent response to get sibling WPs. For each sibling (excluding the current WP), note the `id` and `subject` only.
+
+**Deep-fetch siblings only when WP type is `Subtask`** — subtasks share data structures and benefit from knowing sibling scope. For subtask siblings, also fetch `description.raw` and `_links.status.title`.
+
 ### Children
-Extract `._links.children[].href` and fetch each child's id, subject, type, and status.
+Extract `._links.children[].href` from the WP response and fetch each child's id, subject, type, and status.
 
 ### Relations
 ```bash
@@ -47,15 +53,20 @@ curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
 ```
 Extract the last 5 entries where `comment.raw` is non-empty. Note the author and date.
 
-## Step 4: Determine Target Layer
+## Step 4: Determine Target Layers
 
-1. Read `routingField` from config (default: `category`)
+Route the WP to one or more layers:
+
+1. Read `routing.field` from config (default: `category`)
 2. Get the value of that field from the WP (e.g., the category title)
-3. Look it up in `routingMap`:
-   - If found and it's a string → single layer
+3. **If the value is non-null**, look it up in `routing.map`:
+   - If found and it's a string → single layer `[layerName]`
    - If found and it's an array → multiple layers
-   - If not found → use `defaultLayer`
-4. Get the layer's `path`, `techStack`, `filePatterns`, and `buildCmd` from config
+4. **If the value is null or not found** (fallback heuristics):
+   a. Try `routing.fallbackHeuristics.subjectTagPattern` against the WP subject. If a tag like `[Backend]` matches a key in `routing.map`, use that mapping.
+   b. Scan the WP description for keywords defined in `routing.fallbackHeuristics.descriptionKeywords`. Score each layer by keyword hit count. Use layers with hits.
+   c. If still no match, use `routing.defaultLayer` but **warn the user** and ask for confirmation before proceeding.
+5. For each resolved layer, load its full config (path, techStack, buildCmd, repoRoot, testCmd, lintFixCmd, formatCmd).
 
 ## Step 5: Quality Gate
 
@@ -63,32 +74,89 @@ Check the description:
 - If empty or under 50 characters, warn the user and ask whether to proceed
 - If it looks like a placeholder ("TBD", "TODO", "Description goes here"), warn
 
-## Step 6: Update WP Status to In Progress
+## Step 6: Claim Assignee and Update WP Status to In Progress
 
-Using the `lockVersion` from Step 2, update the status to `in_progress_status` from the config's status mappings.
-
-If the update fails with HTTP 409, re-fetch the WP for a fresh `lockVersion` and retry once.
-
-## Step 7: Git Preflight and Branch
+Using the `lockVersion` from Step 2, update the status to `in_progress_status` from config. Also claim the WP if not already assigned to the current user:
 
 ```bash
-# Ensure clean working tree
-git status --porcelain
-
-# Fetch latest
-git fetch origin
-
-# Create branch from base
-git checkout -b "feature/WP-${WP_ID}-$(echo "${SUBJECT}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | head -c 50)" "origin/$(git symbolic-ref refs/remotes/origin/HEAD | sed 's|refs/remotes/origin/||')"
+curl -s -u "apikey:${OP_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/hal+json" \
+  -X PATCH \
+  --data "{\"lockVersion\": ${LOCK_VERSION}, \"_links\": {\"status\": {\"href\": \"/api/v3/statuses/${IN_PROGRESS_STATUS}\"}, \"assignee\": {\"href\": \"/api/v3/users/me\"}}}" \
+  "${OP_BASE_URL}/api/v3/work_packages/${WP_ID}"
 ```
 
-If the branch already exists, check it out instead.
+**CRITICAL**: Capture the new `lockVersion` from the PATCH response body. Store it for Step 9.
 
-## Step 8: Generate Code
+If HTTP 409 (conflict), re-fetch the WP for a fresh `lockVersion` and retry once.
+
+## Step 7: Derive Branch Name
+
+1. Map WP type to branch type:
+
+| WP Type | Branch Type |
+|---------|-------------|
+| Bug | `bug` |
+| Feature | `feature` |
+| Epic | `feature` |
+| User Story | `feature` |
+| Task | `task` |
+| Subtask | `subtask` |
+
+2. Generate slug from subject: lowercase, replace non-alphanumeric with `-`, collapse consecutive dashes, trim trailing dashes
+3. Read `hookConventions.branchFormat` from config (default: `{type}/WP-{id}-{slug}`)
+4. Read `hookConventions.commitSubjectMaxLength` (default: 72)
+5. Substitute `{type}`, `{id}`, `{slug}` into the format. **Truncate the slug** so the total branch name does not exceed 80 characters.
+
+Store the result as `BRANCH_NAME`.
+
+**If `--dry-run` was specified**: Print a summary and STOP here.
+```
+DRY RUN — WP #${WP_ID}
+  Subject:  ${SUBJECT}
+  Type:     ${WP_TYPE} → branch type: ${BRANCH_TYPE}
+  Layers:   ${LAYER_NAMES}
+  Branch:   ${BRANCH_NAME}
+  Per-layer base branches: ${BASE_BRANCHES}
+```
+
+## Step 8: Per-Layer Loop
+
+For each target layer (from Step 4), execute Steps 8a through 8h. Track results in a `layerResults` map.
+
+### Step 8a: Git Preflight and Branch (per-layer)
+
+Determine the repo context:
+- If `layer.repoRoot` is set, `cd` to that path
+- Otherwise, use the project root
+
+```bash
+git status --porcelain
+git fetch origin
+```
+
+Derive the base branch for this repo:
+```bash
+BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's|refs/remotes/origin/||')
+```
+
+**Resume check**: Before creating a new branch, check if one already exists for this WP:
+```bash
+git branch --list "*WP-${WP_ID}*"
+git branch -r --list "*WP-${WP_ID}*"
+```
+- If a local branch exists, check it out: `git checkout "${BRANCH_NAME}"`
+- If only a remote branch exists, check it out: `git checkout -b "${BRANCH_NAME}" "origin/${BRANCH_NAME}"`
+- If no branch exists, create from base: `git checkout -b "${BRANCH_NAME}" "origin/${BASE_BRANCH}"`
+
+Also check `logs/run-summary.jsonl` for a previous entry for this WP. If a previous run recorded `SUCCESS` for this layer, skip it and move to the next layer.
+
+### Step 8b: Generate Code
 
 **This is where you implement the work package.** You ARE the code generator.
 
-1. Read the project's `CLAUDE.md` for conventions
+1. Read the project's `CLAUDE.md` for conventions (from this layer's repo root)
 2. Read the target layer's directory structure to understand patterns
 3. Read the generation rules from `${CLAUDE_SKILL_DIR}/prompts/` based on WP type:
    - Bug → `bug-rules.md`
@@ -97,97 +165,181 @@ If the branch already exists, check it out instead.
    - User Story → `story-rules.md`
    - Subtask → `subtask-rules.md`
    - Task / default → `task-rules.md`
-4. Using ALL the context gathered (description, hierarchy, children, relations, comments, layer info), implement the work package
+4. Using ALL the context gathered (description, hierarchy, siblings, children, relations, comments, layer info), implement the work package
 5. Write files using Edit/Write tools into the correct layer path
 6. Follow every convention from CLAUDE.md
+7. **If `hookConventions.testParityRequired` is true**: for every new source file generated, also generate a corresponding test file matching `hookConventions.testFilePattern`
 
-## Step 9: Validate
+### Step 8c: Auto-Fix and Pre-Commit Dry Run
 
-If the layer has a `buildCmd` or there's a `VALIDATION_CMD` in `.env`:
+Before committing, run formatting and linting to prevent hook failures:
+
+1. If `layer.formatCmd` is set, run it on the generated/modified files
+2. If `layer.lintFixCmd` is set, run it on the generated/modified files
+3. Stage all changes: `git add -A`
+4. If `hookConventions.manager` is set, run the pre-commit hooks:
+   - **lefthook**: `lefthook run pre-commit`
+   - **husky**: inspect `.husky/pre-commit` and run each command
+   - **pre-commit**: `pre-commit run --all-files`
+5. If the dry run fails:
+   - Parse the error output
+   - Formatting errors → re-run formatCmd
+   - Lint errors → re-run lintFixCmd
+   - Test parity errors → generate missing test files
+   - Re-stage and retry (max 3 attempts)
+6. If still failing after 3 attempts, classify this layer as `PARTIAL` and continue
+
+### Step 8d: Run Full Test Suite
+
+If `layer.testCmd` is set:
+
+1. Run the full test suite: `cd <layer_path> && <testCmd>`
+2. If tests fail:
+   - If failure is in a file we modified → attempt to fix the code
+   - If failure is in an unrelated file (transitive import breakage) → analyze the import chain, add missing mocks or fix the transitive dependency
+   - Re-run tests (max 2 fix attempts)
+3. If tests still fail after retries, classify this layer as `PARTIAL`
+
+### Step 8e: Validate Build
+
+If the layer has a `buildCmd`:
 ```bash
 cd <layer_path> && <buildCmd>
 ```
 
 Classify the result:
-- **SUCCESS**: code generated AND validation passes
-- **PARTIAL**: code generated BUT validation fails
+- **SUCCESS**: code generated AND build passes
+- **PARTIAL**: code generated BUT build or tests fail
 - **FAILURE**: no code generated or critical error
 
-If PARTIAL, try to fix the validation errors. If you can fix them, reclassify as SUCCESS.
+If PARTIAL, try to fix the build errors (max 2 attempts). If fixed, reclassify as SUCCESS.
 
-## Step 10: Commit
+### Step 8f: Sanitize Commit Message and Commit
 
+1. Map WP type to conventional commit prefix:
+   - Feature, User Story, Epic → `feat`
+   - Bug → `fix`
+   - Task, Subtask → `chore`
+
+2. Build raw subject: `{prefix}(WP-{id}): {subject}`
+
+3. Read `hookConventions.commitSubjectMaxLength` (default 72). If the raw subject exceeds this limit, truncate `{subject}` and append `...`
+
+4. For PARTIAL results, prefix with `[WIP] `
+
+5. Build commit body:
+```
+<subject line>
+
+Generated by forgeplan
+Result: ${RESULT}
+OpenProject: ${OP_BASE_URL}/work_packages/${WP_ID}
+```
+
+6. If `commitTrailer` is set in config, append it to the body
+
+7. Commit:
 ```bash
 git add -A
-git commit -m "feat(WP-${WP_ID}): ${SUBJECT}
-
-Generated by forgeplan (Claude Code skill)
-Result: ${RESULT}
-OpenProject: ${OP_BASE_URL}/work_packages/${WP_ID}"
+git commit -m "<full message>"
 ```
 
-For PARTIAL results, prefix the commit with `[WIP]`.
+8. If commit fails (hook rejection), parse the error, fix, and retry (max 2 retries)
 
-## Step 11: Push
+### Step 8g: Push
 
 ```bash
-git push -u origin "feature/WP-${WP_ID}-${SLUG}"
+git push -u origin "${BRANCH_NAME}"
 ```
 
-## Step 12: Create PR
+If push hooks fail, fix and retry (max 2 retries).
 
-Use the platform CLI based on the git host type:
+### Step 8h: Create PR
 
-### GitHub
+Use the platform CLI based on the git host type. **Always pass `--base` explicitly.**
+
+#### GitHub
 ```bash
 gh pr create \
-  --title "feat(WP-${WP_ID}): ${SUBJECT}" \
-  --body "## Auto-generated by forgeplan
+  --title "${COMMIT_SUBJECT}" \
+  --body "<PR body>" \
+  --base "${BASE_BRANCH}" \
+  --reviewer "${REVIEWERS}"
+```
+
+#### GitLab
+```bash
+glab mr create --title "..." --description "..." --target-branch "${BASE_BRANCH}"
+```
+
+PR body template:
+```
+## Auto-generated by forgeplan
 
 **OpenProject WP:** #${WP_ID} — [View](${OP_BASE_URL}/work_packages/${WP_ID})
 **Result:** ${RESULT}
 
 ### Files Changed
-$(git diff --name-only origin/main...HEAD | sed 's/^/- /')
+$(git diff --name-only origin/${BASE_BRANCH}...HEAD | sed 's/^/- /')
 
 ---
-Generated by forgeplan (Claude Code skill)" \
-  --reviewer "${REVIEWERS}"
+Generated by forgeplan (Claude Code skill)
 ```
 
-### GitLab
-```bash
-glab mr create --title "..." --description "..."
+Add labels if supported: `auto-generated`, `wp-${WP_ID}`
+
+Store the PR URL in `layerResults[layerName].prUrl`.
+
+## Step 8-post: PR Cross-Linking
+
+After ALL layers have completed Steps 8a–8h, if multiple layers produced PRs:
+
+For each PR, edit the body to append a "Related PRs" section:
+```
+### Related PRs
+- **backend**: https://github.com/org/backend/pull/92
+- **frontend**: https://github.com/org/frontend/pull/72
 ```
 
-Add labels: `auto-generated`, `wp-${WP_ID}`
+Use `gh pr edit <PR_URL> --body "..."` (GitHub) or `glab mr update` (GitLab).
 
-## Step 13: Update OpenProject
+## Step 9: Update OpenProject
 
-1. Update WP status based on result:
+Aggregate layer results:
+- If ALL layers are SUCCESS → overall `SUCCESS`
+- If ANY layer is PARTIAL → overall `PARTIAL`
+- If ANY layer is FAILURE → overall `FAILURE` (unless at least one succeeded, then `PARTIAL`)
+
+1. Update WP status based on overall result:
    - SUCCESS → `success_status`
    - PARTIAL → `partial_status`
-   - FAILURE → `failure_status` (if not null)
+   - FAILURE → `failure_status` (if not 0)
+
+   Use the `lockVersion` captured from Step 6. **Capture the new lockVersion from the response.**
 
 2. Post a summary comment:
 ```
 ## forgeplan Report
 
-| Field | Value |
-|-------|-------|
-| **Result** | ${RESULT} |
-| **Branch** | `feature/WP-${WP_ID}-${SLUG}` |
-| **PR** | ${PR_URL} |
-| **Files changed** | ${FILE_COUNT} |
+| Layer | Result | Branch | PR |
+|-------|--------|--------|----|
+| ${LAYER_NAME} | ${RESULT} | `${BRANCH_NAME}` | ${PR_URL} |
+| ... | ... | ... | ... |
+
+**Overall:** ${OVERALL_RESULT}
 
 Generated by forgeplan (Claude Code skill)
 ```
 
-## Step 14: Log Summary
+## Step 10: Log Summary
 
 ```bash
 mkdir -p logs
-echo '{"wp_id":${WP_ID},"result":"${RESULT}","branch":"${BRANCH}","pr_url":"${PR_URL}","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' >> logs/run-summary.jsonl
+```
+
+Append a JSON line to `logs/run-summary.jsonl`:
+```json
+{"wp_id": ${WP_ID}, "result": "${OVERALL_RESULT}", "layers": [{"name": "${LAYER_NAME}", "branch": "${BRANCH_NAME}", "pr_url": "${PR_URL}", "result": "${LAYER_RESULT}"}, ...], "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 ```
 
 Report the final result to the user.

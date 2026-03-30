@@ -1,0 +1,31 @@
+{
+  "toolPaths": {
+    "dotnet": null,
+    "node": null,
+    "npm": null,
+    "gh": null,
+    "glab": null
+  },
+  "hookConventions": {
+    "manager": null,
+    "configFile": null,
+    "branchFormat": "{type}/WP-{id}-{slug}",
+    "commitSubjectMaxLength": 72,
+    "testParityRequired": false,
+    "testFilePattern": null
+  },
+  "layerOverrides": {
+    "backend": {
+      "repoRoot": null,
+      "testCmd": null,
+      "lintFixCmd": null,
+      "formatCmd": null
+    },
+    "frontend": {
+      "repoRoot": null,
+      "testCmd": null,
+      "lintFixCmd": null,
+      "formatCmd": null
+    }
+  }
+}
