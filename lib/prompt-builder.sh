@@ -399,24 +399,20 @@ prompt_build() {
   # Sanitize description
   wp_description=$(prompt_sanitize "$wp_description")
 
-  # Gather context blocks
-  log_info "Gathering hierarchy context..."
+  # Gather context blocks — each step makes OpenProject API calls
+  printf '[forgeplan] Building context: parent/siblings...\n' >&2
   local hierarchy_block
   hierarchy_block=$(prompt_gather_hierarchy "$wp_json")
-
-  log_info "Gathering children context..."
+  printf '[forgeplan] Building context: children...\n' >&2
   local children_block
   children_block=$(prompt_gather_children "$wp_json")
-
-  log_info "Gathering relations context..."
+  printf '[forgeplan] Building context: relations...\n' >&2
   local relations_block
   relations_block=$(prompt_gather_relations "$wp_id")
-
-  log_info "Gathering layer context..."
+  printf '[forgeplan] Building context: layer file tree...\n' >&2
   local layer_context_block
   layer_context_block=$(prompt_gather_layer_context "$layers")
-
-  log_info "Gathering comments context..."
+  printf '[forgeplan] Building context: comments...\n' >&2
   local comments_block
   comments_block=$(prompt_gather_comments "$wp_id")
 

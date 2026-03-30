@@ -69,7 +69,9 @@ CLAUDE_ATTEMPTS=0
 claude_build_command() {
   local prompt_file="$1"
 
-  CLAUDE_CMD="claude --model ${CLAUDE_MODEL} --print --output-format json --max-turns 50 --prompt-file ${prompt_file}"
+  # Run interactively so the user can see Claude's progress and respond to
+  # any questions. Output is shown live in the terminal.
+  CLAUDE_CMD="claude --model ${CLAUDE_MODEL} --max-turns 50 --prompt-file ${prompt_file}"
 
   log_debug "Claude command: ${CLAUDE_CMD}"
 }
@@ -92,7 +94,9 @@ claude_execute_with_timeout() {
 
   cd "$REPO_ROOT" || exit 4
 
-  _fp_timeout "$timeout_seconds" bash -c "$CLAUDE_CMD" > "$CLAUDE_OUTPUT_FILE" 2>&1
+  # Run interactively — output goes directly to the terminal so the user can
+  # see Claude's progress and respond. Exit code is captured for retry logic.
+  _fp_timeout "$timeout_seconds" bash -c "$CLAUDE_CMD"
   CLAUDE_EXIT_CODE=$?
 
   local end_time elapsed
@@ -132,18 +136,10 @@ claude_execute_with_retry() {
       return 124
     fi
 
-    # Check if retryable (rate limit, server error, network error)
-    local stderr_content=""
-    if [[ -f "$CLAUDE_OUTPUT_FILE" ]]; then
-      stderr_content=$(cat "$CLAUDE_OUTPUT_FILE")
-    fi
-
+    # Non-zero exit — check if the exit code suggests a retryable error.
+    # (Rate limit = 1 is common; network errors also exit non-zero)
     local retryable=false
-    if echo "$stderr_content" | grep -qiE "rate.?limit|429"; then
-      retryable=true
-    elif echo "$stderr_content" | grep -qiE "server.?error|500|502|503"; then
-      retryable=true
-    elif echo "$stderr_content" | grep -qiE "network|connection|ECONNREFUSED|ETIMEDOUT"; then
+    if [[ "$CLAUDE_EXIT_CODE" -eq 1 ]]; then
       retryable=true
     fi
 
@@ -178,27 +174,10 @@ claude_execute_with_retry() {
 # Sets CLAUDE_COST_USD, CLAUDE_DURATION_MS, CLAUDE_NUM_TURNS.
 # ---------------------------------------------------------------------------
 claude_parse_output() {
-  if [[ ! -f "$CLAUDE_OUTPUT_FILE" ]]; then
-    CLAUDE_COST_USD="unknown"
-    CLAUDE_DURATION_MS="unknown"
-    CLAUDE_NUM_TURNS="unknown"
-    return 0
-  fi
-
-  # Validate JSON
-  if ! jq empty "$CLAUDE_OUTPUT_FILE" 2>/dev/null; then
-    log_warn "Claude Code output is not valid JSON. Capturing as raw text."
-    CLAUDE_COST_USD="unknown"
-    CLAUDE_DURATION_MS="unknown"
-    CLAUDE_NUM_TURNS="unknown"
-    return 0
-  fi
-
-  CLAUDE_COST_USD=$(jq -r '.cost_usd // "unknown"' "$CLAUDE_OUTPUT_FILE")
-  CLAUDE_DURATION_MS=$(jq -r '.duration_ms // "unknown"' "$CLAUDE_OUTPUT_FILE")
-  CLAUDE_NUM_TURNS=$(jq -r '.num_turns // "unknown"' "$CLAUDE_OUTPUT_FILE")
-
-  log_debug "Parsed output: cost=\$${CLAUDE_COST_USD}, duration=${CLAUDE_DURATION_MS}ms, turns=${CLAUDE_NUM_TURNS}"
+  # Running interactively — no structured output to parse.
+  CLAUDE_COST_USD="unknown"
+  CLAUDE_DURATION_MS="unknown"
+  CLAUDE_NUM_TURNS="unknown"
 }
 
 # ==========================================================================
@@ -376,7 +355,12 @@ claude_run() {
   # Build command
   claude_build_command "$prompt_file"
 
-  # Execute with retry
+  # Print a clear separator so the user knows Claude is now running
+  echo "" >&2
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+  echo "  Claude Code is running — you can see and respond below" >&2
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+  echo "" >&2
   log_info "Invoking Claude Code..."
   claude_execute_with_retry "${GENERATION_TIMEOUT:-600}" || true
 

@@ -340,6 +340,7 @@ ENVFILE
   fi
 
   echo "$config_json" | jq '.' > forgeplan.config.json
+  local layer_count=${#path_arr[@]}
   echo "✅ forgeplan.config.json created with ${layer_count} layer(s)"
 
   # --- Step 3b: Enrich layers with Claude Code ---
@@ -428,6 +429,9 @@ ENVFILE
   source "${FP_INSTALL_DIR}/lib/init.sh" 2>/dev/null || true
 
   if type init_validate_connection &>/dev/null; then
+    # REPO_ROOT may not be a git repo (e.g., mono-repo root where each layer
+    # has its own .git). Set it explicitly so config_load skips git detection.
+    export REPO_ROOT="$project_dir"
     config_load ""
     config_defaults
 
@@ -438,16 +442,32 @@ ENVFILE
     init_discover_statuses
     init_display_statuses
 
+    # Ask Claude to suggest mappings from the real status names
+    init_claude_suggest_statuses
+
+    echo "Map your OpenProject statuses to forgeplan events."
+    echo "Flow: [pickup] → forgeplan runs → [in_progress] → done → [success / partial / failure]"
+    echo ""
+
     init_prompt_mapping "pickup_status" \
-      "Which status marks a WP as ready for code generation? (used by --queue to find work)"
+      "Tickets ready to work on" \
+      "forgeplan picks up tickets in this status (--queue scans for these)"
+
     init_prompt_mapping "in_progress_status" \
-      "Which status should be set when the tool starts processing a WP?"
+      "Ticket is being worked on" \
+      "forgeplan sets this while generating code — signals the ticket is taken"
+
     init_prompt_mapping "success_status" \
-      "Which status should be set when code generation and validation both pass?"
+      "Code generated and build passed" \
+      "forgeplan sets this after opening a PR and validation succeeds"
+
     init_prompt_mapping "partial_status" \
-      "Which status should be set when code is generated but validation fails?"
+      "Code generated but build failed" \
+      "forgeplan sets this when code was written but validation failed"
+
     init_prompt_mapping "failure_status" \
-      "Which status should be set when generation produces no output? (enter 0 for no change)"
+      "Generation produced no output  (0 = don't change status)" \
+      "forgeplan sets this when it couldn't generate anything at all"
 
     init_write_config
   else
@@ -491,11 +511,11 @@ Rules:
 - Output raw JSON only. No markdown. No explanation.
 PROMPT
 
-  if claude --print --output-format text --max-turns 10 \
-    --prompt-file "$tmp_prompt" > "$tmp_output" 2>/dev/null; then
+  if claude -p "$(cat "$tmp_prompt")" --output-format text --max-turns 10 \
+    > "$tmp_output" 2>/dev/null; then
 
     local enriched
-    enriched=$(cat "$tmp_output" | sed -n '/^{/,/^}/p' | head -200)
+    enriched=$(cat "$tmp_output" | sed -n '/^\s*{/,/^\s*}/p' | head -200)
 
     if echo "$enriched" | jq empty 2>/dev/null; then
       echo "$enriched" | jq '.' > forgeplan.config.json
@@ -549,8 +569,8 @@ Look at the actual codebase: package.json, config files, source code structure, 
 Output ONLY the Markdown content for CLAUDE.md. No fences wrapping the whole output. Start directly with a heading.
 PROMPT
 
-  if claude --print --output-format text --max-turns 15 \
-    --prompt-file "$tmp_prompt" > "$tmp_output" 2>/dev/null; then
+  if claude -p "$(cat "$tmp_prompt")" --output-format text --max-turns 15 \
+    > "$tmp_output" 2>/dev/null; then
 
     local content
     content=$(cat "$tmp_output")
@@ -628,8 +648,8 @@ logs/
 Output ONLY the .gitignore content. No markdown fences. No explanation. One pattern per line with section comments.
 PROMPT
 
-  if claude --print --output-format text --max-turns 5 \
-    --prompt-file "$tmp_prompt" > "$tmp_output" 2>/dev/null; then
+  if claude -p "$(cat "$tmp_prompt")" --output-format text --max-turns 5 \
+    > "$tmp_output" 2>/dev/null; then
 
     local content
     content=$(cat "$tmp_output")
@@ -1243,6 +1263,54 @@ process_wp() {
   if [[ -n "${FLAG_LAYER}" ]]; then
     layers="${FLAG_LAYER}"
     log_info "Layer override: ${layers}"
+  elif [[ ! -d "${REPO_ROOT}/.git" ]]; then
+    # Multi-repo setup: root is not a git repo, each layer has its own .git.
+    # Automatic routing is unreliable — prompt the user to select a layer.
+    local layer_list
+    layer_list=$(echo "$FP_LAYERS_JSON" | jq -r '.layers | keys[]')
+    local layer_arr=()
+    while IFS= read -r l; do layer_arr+=("$l"); done <<< "$layer_list"
+    local layer_count=${#layer_arr[@]}
+
+    echo ""
+    echo "WP #${wp_id}: ${wp_subject}"
+    echo "Select layer to work in:"
+    local li
+    for ((li = 0; li < layer_count; li++)); do
+      printf "  %d. %s\n" "$((li + 1))" "${layer_arr[$li]}"
+    done
+    echo ""
+
+    local layer_sel=""
+    while true; do
+      printf "Layer number(s) [1-%d], comma-separated for multiple: " "$layer_count"
+      read -r layer_sel
+
+      # Validate all entries are in range
+      local valid=true
+      IFS=',' read -ra sel_parts <<< "$layer_sel"
+      if [[ ${#sel_parts[@]} -eq 0 ]]; then valid=false; fi
+      for part in "${sel_parts[@]}"; do
+        part=$(echo "$part" | xargs)
+        if ! [[ "$part" =~ ^[0-9]+$ ]] || \
+           [[ "$part" -lt 1 || "$part" -gt "$layer_count" ]]; then
+          valid=false; break
+        fi
+      done
+
+      [[ "$valid" == "true" ]] && break
+      echo "Invalid. Enter number(s) between 1 and ${layer_count}, e.g. 4 or 4,5"
+    done
+
+    # Build space-separated layer names from selections
+    layers=""
+    IFS=',' read -ra sel_parts <<< "$layer_sel"
+    for part in "${sel_parts[@]}"; do
+      part=$(echo "$part" | xargs)
+      local lname="${layer_arr[$((part - 1))]}"
+      layers="${layers:+$layers }$lname"
+    done
+    log_info "User selected layer(s): ${layers}"
   else
     local routing_field routing_value
     routing_field=$(echo "$FP_LAYERS_JSON" | jq -r '.routingField // "category"')
@@ -1274,6 +1342,29 @@ process_wp() {
   fi
 
   # --- Step 6: Git preflight & branch ---
+  # In multi-repo setups REPO_ROOT is not a git repo — resolve git root from
+  # the first selected layer so all git ops target the right repository.
+  local first_layer
+  first_layer=$(echo "$layers" | awk '{print $1}')
+  local layer_git_root
+  layer_git_root=$(_resolve_layer_git_dir "$first_layer")
+  if [[ "$layer_git_root" != "$REPO_ROOT" ]]; then
+    log_info "Using layer git root: ${layer_git_root}"
+    REPO_ROOT="$layer_git_root"
+    export REPO_ROOT
+    # Re-derive GIT_BASE_BRANCH for this layer's repo (may differ from global default)
+    local layer_ref
+    layer_ref=$(git -C "$REPO_ROOT" symbolic-ref "refs/remotes/${GIT_REMOTE}/HEAD" 2>/dev/null || echo "")
+    if [[ -n "$layer_ref" ]]; then
+      GIT_BASE_BRANCH="${layer_ref##refs/remotes/${GIT_REMOTE}/}"
+    else
+      # Fall back to current branch if remote HEAD is not set
+      GIT_BASE_BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    fi
+    export GIT_BASE_BRANCH
+    log_info "Base branch for this layer: ${GIT_BASE_BRANCH}"
+  fi
+
   if [[ "${FLAG_DRY_RUN}" != "true" ]]; then
     git_preflight "$REPO_ROOT"
     git_create_branch "$wp_id" "$wp_subject"

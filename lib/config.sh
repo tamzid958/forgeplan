@@ -51,12 +51,13 @@ config_load() {
     exit 3
   fi
 
-  # Auto-detect REPO_ROOT from git if not set
+  # Auto-detect REPO_ROOT from git if not set.
+  # In multi-repo setups the project root is not itself a git repo — each layer
+  # has its own .git. Fall back to PWD so those setups work too.
   if [[ -z "${REPO_ROOT:-}" ]]; then
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
     if [[ -z "$REPO_ROOT" ]]; then
-      echo "ERROR: Not inside a git repository. Run forgeplan from your project directory." >&2
-      exit 3
+      REPO_ROOT="$PWD"
     fi
   fi
 
@@ -377,10 +378,16 @@ config_get_layer_base_branch() {
 # Final validation after all config is loaded.
 # ---------------------------------------------------------------------------
 config_validate_all() {
-  # Verify REPO_ROOT is a git repo
+  # Verify REPO_ROOT is a git repo — allow mono-repo roots where each layer
+  # has its own .git (root itself may not be a git repo).
   if [[ ! -d "${REPO_ROOT}/.git" ]]; then
-    echo "ERROR: ${REPO_ROOT} is not a Git repository (no .git directory)" >&2
-    exit 3
+    local has_layer_git
+    has_layer_git=$(find "${REPO_ROOT}" -maxdepth 2 -name ".git" -type d 2>/dev/null | head -1)
+    if [[ -z "$has_layer_git" ]]; then
+      echo "ERROR: ${REPO_ROOT} is not a Git repository and contains no layer git repos" >&2
+      exit 3
+    fi
+    log_warn "REPO_ROOT is not a git repo; using per-layer git repos."
   fi
 
   # Verify .env is in .gitignore

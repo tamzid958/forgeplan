@@ -21,7 +21,7 @@ init_validate_connection() {
   tmp_code=$(curl --fail-with-body --silent --show-error --max-time 15 \
     -w '%{http_code}' \
     -o "$tmp_body" \
-    -H "Authorization: Bearer ${OP_API_KEY}" \
+    -u "apikey:${OP_API_KEY}" \
     -H "Accept: application/hal+json" \
     "${OP_BASE_URL}/api/v3" 2>/dev/null) || true
 
@@ -57,7 +57,7 @@ init_validate_project() {
   tmp_code=$(curl --fail-with-body --silent --show-error --max-time 15 \
     -w '%{http_code}' \
     -o "$tmp_body" \
-    -H "Authorization: Bearer ${OP_API_KEY}" \
+    -u "apikey:${OP_API_KEY}" \
     -H "Accept: application/hal+json" \
     "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}" 2>/dev/null) || true
 
@@ -93,7 +93,7 @@ init_discover_statuses() {
   tmp_code=$(curl --fail-with-body --silent --show-error --max-time 15 \
     -w '%{http_code}' \
     -o "$tmp_body" \
-    -H "Authorization: Bearer ${OP_API_KEY}" \
+    -u "apikey:${OP_API_KEY}" \
     -H "Accept: application/hal+json" \
     "${OP_BASE_URL}/api/v3/statuses" 2>/dev/null) || true
 
@@ -115,7 +115,7 @@ init_discover_statuses() {
     STATUS_IDS[$i]="$id"
     STATUS_NAMES[$i]="$name"
     STATUS_CLOSED[$i]="$is_closed"
-    ((i++))
+    (( ++i )) || true
   done < <(jq -r '
     [._embedded.elements[]] | sort_by(.position)
     | .[] | [(.id|tostring), .name, (if .isClosed then "closed" else "open" end)]
@@ -137,65 +137,141 @@ init_display_statuses() {
   echo ""
 }
 
+# Suggestions populated by init_claude_suggest_statuses:
+#   INIT_SUGGESTIONS[event_name] = 1-based status index
+declare -A INIT_SUGGESTIONS
+
 # ---------------------------------------------------------------------------
-# init_prompt_mapping <event_name> <description>
-# Prompt user to select a status for a pipeline event.
+# init_claude_suggest_statuses
+# Ask Claude Code to suggest a status number for each pipeline event based on
+# the actual status names fetched from OpenProject. Falls back to empty (no
+# suggestion) if Claude is unavailable or returns invalid output.
+# ---------------------------------------------------------------------------
+init_claude_suggest_statuses() {
+  if ! command -v claude > /dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "Asking Claude to suggest status mappings..."
+
+  # Build a numbered status list for the prompt
+  local status_list=""
+  local i
+  for ((i = 0; i < STATUS_COUNT; i++)); do
+    status_list+="$((i + 1)). ${STATUS_NAMES[$i]} (${STATUS_CLOSED[$i]})"$'\n'
+  done
+
+  local prompt
+  prompt=$(cat <<PROMPT
+You are configuring a CI/CD tool called forgeplan that integrates with OpenProject.
+It needs to know which status to use for each pipeline event.
+
+Available OpenProject statuses:
+${status_list}
+Pipeline events to map (return ONLY a JSON object, no explanation):
+- pickup_status: tickets that are ready and waiting for forgeplan to start work
+- in_progress_status: set while forgeplan is actively generating code
+- success_status: set when code generation and build validation both succeed
+- partial_status: set when code was generated but the build/validation failed
+- failure_status: set when forgeplan produced no output at all (use 0 if none fits)
+
+Return a single JSON object using the 1-based status numbers above, e.g.:
+{"pickup_status":3,"in_progress_status":4,"success_status":5,"partial_status":5,"failure_status":0}
+PROMPT
+)
+
+  local suggestion_json
+  suggestion_json=$(claude -p "$prompt" --output-format text --max-turns 1 2>/dev/null \
+    | grep -o '{[^}]*}' | head -1)
+
+  if ! echo "$suggestion_json" | jq empty 2>/dev/null; then
+    return 0
+  fi
+
+  for event in pickup_status in_progress_status success_status partial_status failure_status; do
+    local val
+    val=$(echo "$suggestion_json" | jq -r --arg e "$event" '.[$e] // empty')
+    if [[ "$val" =~ ^[0-9]+$ ]]; then
+      INIT_SUGGESTIONS["$event"]="$val"
+    fi
+  done
+
+  echo "✅ Claude suggested mappings (press Enter on each to accept)"
+  echo ""
+}
+
+# ---------------------------------------------------------------------------
+# init_prompt_mapping <event_name> <label> <hint>
+# Prompt user to pick a status. Shows Claude's suggestion as default.
+# Press Enter to accept; enter 0 to skip (failure_status only).
 # ---------------------------------------------------------------------------
 init_prompt_mapping() {
   local event_name="$1"
-  local description="$2"
+  local label="$2"
+  local hint="$3"
+
   local allow_none=false
-  local min_val=1
+  [[ "$event_name" == "failure_status" ]] && allow_none=true
 
-  if [[ "$event_name" == "failure_status" ]]; then
-    allow_none=true
-    min_val=0
+  local suggested_num="${INIT_SUGGESTIONS[$event_name]:-}"
+  # Treat 0 suggestion as "no change" for failure, empty for others
+  if [[ "$suggested_num" == "0" ]]; then
+    [[ "$allow_none" == "true" ]] && suggested_num="0" || suggested_num=""
   fi
 
-  echo "$description"
+  echo "→ ${label}"
+  echo "  (${hint})"
+
   local prompt_text
-  if [[ "$allow_none" == "true" ]]; then
-    prompt_text="Select status number [0-${STATUS_COUNT}], 0=no change: "
+  if [[ -n "$suggested_num" ]]; then
+    if [[ "$suggested_num" == "0" ]]; then
+      echo "  Suggested: no change (skip)"
+    else
+      printf "  Suggested: %d. %s\n" "$suggested_num" "${STATUS_NAMES[$((suggested_num - 1))]}"
+    fi
+    if [[ "$allow_none" == "true" ]]; then
+      prompt_text="  Enter number [0-${STATUS_COUNT}], or press Enter to accept: "
+    else
+      prompt_text="  Enter number [1-${STATUS_COUNT}], or press Enter to accept: "
+    fi
   else
-    prompt_text="Select status number [1-${STATUS_COUNT}]: "
+    if [[ "$allow_none" == "true" ]]; then
+      prompt_text="  Enter number [0-${STATUS_COUNT}] (0 = no change): "
+    else
+      prompt_text="  Enter number [1-${STATUS_COUNT}]: "
+    fi
   fi
 
-  local attempts=0
   local selection
-  while [[ $attempts -lt 3 ]]; do
+  while true; do
     printf "%s" "$prompt_text"
     read -r selection
 
-    # Validate numeric
-    if ! [[ "$selection" =~ ^[0-9]+$ ]]; then
-      echo "Invalid input. Please enter a number."
-      ((attempts++))
-      continue
+    # Accept suggestion on empty input
+    if [[ -z "$selection" && -n "$suggested_num" ]]; then
+      selection="$suggested_num"
     fi
 
-    # Validate range
-    if [[ "$selection" -lt "$min_val" || "$selection" -gt "$STATUS_COUNT" ]]; then
-      echo "Out of range. Please enter ${min_val}-${STATUS_COUNT}."
-      ((attempts++))
-      continue
-    fi
-
-    # Handle "no change" for failure_status
-    if [[ "$selection" -eq 0 ]]; then
+    # Allow "0 = no change" only for failure_status
+    if [[ "$allow_none" == "true" && "$selection" == "0" ]]; then
       INIT_MAP_NAMES["$event_name"]=""
       INIT_MAP_IDS["$event_name"]=""
+      echo ""
       return 0
     fi
 
-    # Map 1-based selection to 0-based index
+    if ! [[ "$selection" =~ ^[0-9]+$ ]] || \
+       [[ "$selection" -lt 1 || "$selection" -gt "$STATUS_COUNT" ]]; then
+      echo "  Please enter a number between 1 and ${STATUS_COUNT}${allow_none:+, or 0 to skip}."
+      continue
+    fi
+
     local idx=$((selection - 1))
     INIT_MAP_NAMES["$event_name"]="${STATUS_NAMES[$idx]}"
     INIT_MAP_IDS["$event_name"]="${STATUS_IDS[$idx]}"
+    echo ""
     return 0
   done
-
-  echo "ERROR: Too many invalid attempts. Aborting." >&2
-  exit 3
 }
 
 # ---------------------------------------------------------------------------
@@ -212,17 +288,14 @@ init_write_config() {
   fi
 
   # Build the _status_ids object from all discovered statuses
-  local ids_json="{"
+  local merged_ids="{}"
   local i
   for ((i = 0; i < STATUS_COUNT; i++)); do
-    [[ $i -gt 0 ]] && ids_json+=","
-    ids_json+="$(jq -n --arg name "${STATUS_NAMES[$i]}" --argjson id "${STATUS_IDS[$i]}" '{($name): $id}' | jq -c '.')"
+    merged_ids=$(echo "$merged_ids" | jq \
+      --arg name "${STATUS_NAMES[$i]}" \
+      --argjson id "${STATUS_IDS[$i]}" \
+      '. + {($name): $id}')
   done
-  ids_json="}"
-
-  # Merge individual objects into one
-  local merged_ids
-  merged_ids=$(printf '%s' "$ids_json" | sed 's/}{/,/g')
 
   # Build failure_status value (null or string)
   local failure_val="null"
@@ -300,21 +373,32 @@ init_run() {
   init_discover_statuses
   init_display_statuses
 
-  # Prompt for each pipeline event
+  # Ask Claude to suggest mappings from the real status names
+  init_claude_suggest_statuses
+
+  echo "Map your OpenProject statuses to forgeplan events."
+  echo "Flow: [pickup] → forgeplan runs → [in_progress] → done → [success / partial / failure]"
+  echo ""
+
   init_prompt_mapping "pickup_status" \
-    "Which status marks a WP as ready for code generation? (used by --queue to find work)"
+    "Tickets ready to work on" \
+    "forgeplan picks up tickets in this status (--queue scans for these)"
 
   init_prompt_mapping "in_progress_status" \
-    "Which status should be set when the tool starts processing a WP?"
+    "Ticket is being worked on" \
+    "forgeplan sets this while generating code — signals the ticket is taken"
 
   init_prompt_mapping "success_status" \
-    "Which status should be set when code generation and validation both pass?"
+    "Code generated and build passed" \
+    "forgeplan sets this after opening a PR and validation succeeds"
 
   init_prompt_mapping "partial_status" \
-    "Which status should be set when code is generated but validation fails?"
+    "Code generated but build failed" \
+    "forgeplan sets this when code was written but validation failed"
 
   init_prompt_mapping "failure_status" \
-    "Which status should be set when generation produces no output? (enter 0 for no change)"
+    "Generation produced no output  (0 = don't change status)" \
+    "forgeplan sets this when it couldn't generate anything at all"
 
   # Write config
   init_write_config

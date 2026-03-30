@@ -33,7 +33,7 @@ op_request() {
     --silent --show-error --max-time 30
     -w '%{http_code}'
     -o "$tmp_body"
-    -H "Authorization: Bearer ${OP_API_KEY}"
+    -u "apikey:${OP_API_KEY}"
     -H "Content-Type: application/json"
     -H "Accept: application/hal+json"
     -X "$method"
