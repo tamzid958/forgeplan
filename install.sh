@@ -154,9 +154,26 @@ do_install() {
   check_deps
 
   echo ""
+
+  # Fall back to ~/.local if default /usr/local isn't writable
+  if [[ "$PREFIX" == "/usr/local" ]] && ! mkdir -p "${BINDIR}" "${DATADIR}/lib" 2>/dev/null; then
+    echo "⚠️  Cannot write to /usr/local, falling back to ~/.local"
+    PREFIX="${HOME}/.local"
+    BINDIR="${PREFIX}/bin"
+    DATADIR="${PREFIX}/share/forgeplan"
+  fi
+
   echo "Installing forgeplan to ${PREFIX}..."
 
-  mkdir -p "${BINDIR}" "${DATADIR}/lib"
+  if ! mkdir -p "${BINDIR}" "${DATADIR}/lib" 2>/dev/null; then
+    echo ""
+    echo "ERROR: Permission denied writing to ${PREFIX}." >&2
+    echo "" >&2
+    echo "Options:" >&2
+    echo "  1. Run with sudo:          sudo ./install.sh" >&2
+    echo "  2. Install to home dir:    ./install.sh --prefix ~/.local" >&2
+    exit 1
+  fi
 
   # Copy main script with install dir embedded
   sed "s|FP_INSTALL_DIR=__INSTALL_DIR__|FP_INSTALL_DIR=${DATADIR}|" \

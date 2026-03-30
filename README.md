@@ -142,10 +142,10 @@ After installing, either:
 ### Option A: One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tamzid958/forgeplan/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tamzid958/forgeplan/master/install.sh | sudo bash
 ```
 
-Custom install location (no sudo needed):
+Install to home directory (no sudo needed):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tamzid958/forgeplan/master/install.sh | bash -s -- --prefix ~/.local
 ```
@@ -155,7 +155,12 @@ curl -fsSL https://raw.githubusercontent.com/tamzid958/forgeplan/master/install.
 ```bash
 git clone https://github.com/tamzid958/forgeplan.git
 cd forgeplan
-./install.sh
+sudo ./install.sh
+```
+
+No sudo needed with `--prefix`:
+```bash
+./install.sh --prefix ~/.local
 ```
 
 ### Verify Installation
@@ -698,6 +703,18 @@ brew install claude-code
 ```
 
 Then authenticate: `claude` (follow the login prompts once).
+
+If you installed `claude` in bash but use **zsh** as your default shell, add the npm/brew bin to your zsh PATH:
+
+```bash
+# Find where claude is installed
+bash -lc "which claude"
+# e.g. /opt/homebrew/bin/claude or ~/.npm-global/bin/claude
+
+# Add that directory to your ~/.zshrc
+echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
 
 ### "Working tree has uncommitted changes"
 
