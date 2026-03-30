@@ -20,7 +20,7 @@ export interface ServerState {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "forgeplan",
-    version: "1.0.0-alpha",
+    version: "1.0.0-alpha.2",
   });
 
   const state: ServerState = {
