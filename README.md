@@ -64,12 +64,64 @@ git clone https://github.com/tamzid958/forgeplan.git .claude/skills/forgeplan
 git clone https://github.com/tamzid958/forgeplan.git ~/.claude/skills/forgeplan
 ```
 
+### Option C: MCP Server (any MCP client — Claude Code, Cursor, Windsurf, Continue)
+
+Install via npm:
+
+```bash
+npm install -g @forgeplan/mcp-server
+```
+
+Then add to your client config (e.g., `.mcp.json`, `~/.claude/settings.json`, `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "forgeplan": {
+      "command": "forgeplan-mcp"
+    }
+  }
+}
+```
+
+Or use `npx` without installing:
+
+```json
+{
+  "mcpServers": {
+    "forgeplan": {
+      "command": "npx",
+      "args": ["-y", "@forgeplan/mcp-server"]
+    }
+  }
+}
+```
+
+See [`mcp-server/README.md`](mcp-server/README.md) for full tool reference and usage guide.
+
 ### Verify
 
 Open Claude Code in your project and type:
 ```
 /forgeplan doctor
 ```
+
+---
+
+## Skill vs MCP Server
+
+Forgeplan ships two interfaces to the same pipeline. Use whichever fits your editor:
+
+| | Claude Code Skill | MCP Server |
+|---|---|---|
+| **Client** | Claude Code only | Any MCP client (Claude Code, Cursor, Windsurf, Continue) |
+| **Install** | `git clone` into `.claude/skills/` | `npm install -g @forgeplan/mcp-server` |
+| **Invoke** | `/forgeplan wp 42` | Natural language: "Process work package #42" |
+| **Transport** | Runs inside Claude Code session | stdio subprocess (local, no HTTP) |
+| **Code generation** | Claude Code writes files directly | Client LLM writes files; server handles everything else |
+| **Publish** | N/A | `npm publish` via GitHub Actions |
+
+Both share the same config files (`forgeplan.config.json`, `forgeplan.local.json`, `.env`), the same generation rules (`prompts/`), and the same git/OpenProject workflow.
 
 ---
 
@@ -313,12 +365,26 @@ forgeplan/
     doctor.md                     # Health check
     help.md                       # Command reference
   prompts/
+    _base.md                      # Shared generation rules (all types)
     task-rules.md                 # Default generation rules
     bug-rules.md                  # Bug fix rules
     feature-rules.md              # Feature rules
     epic-rules.md                 # Epic/scaffold rules
     story-rules.md                # User story rules
     subtask-rules.md              # Subtask rules
+  mcp-server/                     # MCP server (for Cursor, Windsurf, Continue, etc.)
+    package.json                  # @forgeplan/mcp-server — published to npm
+    bin/forgeplan-mcp.ts          # stdio entry point
+    src/
+      index.ts                    # Server setup + tool/resource/prompt registration
+      config/                     # Config types, loader, validator
+      openproject/                # OP API client + quality gate
+      routing/                    # 4-tier layer routing
+      git/                        # Branch naming, operations, PR create/close
+      tools/                      # 19 MCP tools (config, WP, git, pipeline)
+      resources/                  # 3 MCP resources (rules, config, log)
+      prompts/                    # 2 MCP prompts (process_work_package, review)
+      util/                       # exec (no shell), deep-merge, JSONL logger
   forgeplan.config.json.example   # Shared config template
   forgeplan.local.json.example    # Local config template
   README.md
