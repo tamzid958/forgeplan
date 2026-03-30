@@ -1,0 +1,33 @@
+{
+  "layers": {
+    "backend": {
+      "path": "src/backend",
+      "techStack": "ASP.NET 8, C#, Entity Framework Core",
+      "filePatterns": ["**/*.cs", "**/*.csproj"],
+      "buildCmd": "dotnet build"
+    },
+    "frontend": {
+      "path": "src/frontend",
+      "techStack": "Next.js 14, TypeScript, Tailwind CSS",
+      "filePatterns": ["**/*.tsx", "**/*.ts"],
+      "buildCmd": "npm run build"
+    }
+  },
+  "routingField": "category",
+  "routingMap": {
+    "Backend": "backend",
+    "Frontend": "frontend",
+    "Full-Stack": ["backend", "frontend"]
+  },
+  "defaultLayer": "backend",
+  "hooks": {},
+  "statuses": {
+    "_comment": "Run 'forgeplan --init' to populate this section automatically",
+    "pickup_status": null,
+    "in_progress_status": null,
+    "success_status": null,
+    "partial_status": null,
+    "failure_status": null,
+    "_status_ids": {}
+  }
+}

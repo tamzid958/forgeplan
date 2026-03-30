@@ -1,0 +1,8 @@
+.env
+forgeplan.config.json
+forgeplan.statuses.json
+logs/
+.git
+phases/
+Plan.md
+README.md
