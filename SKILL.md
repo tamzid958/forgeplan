@@ -162,14 +162,34 @@ curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
 Filter for entries where `comment.raw` is non-empty.
 
 ### Query WPs by Status (with assignee filter)
+
+**Important**: Filters and sortBy must be URL-encoded when passed as query parameters. Build the filter JSON, then URL-encode it before appending to the URL.
+
 ```bash
+# Build filter JSON, then URL-encode
+FILTERS='[{"assignee":{"operator":"=","values":["me"]}},{"status":{"operator":"=","values":["'"${STATUS_ID}"'"]}}]'
+SORT='[["priority","desc"],["id","asc"]]'
+ENCODED_FILTERS=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${FILTERS}'))")
+ENCODED_SORT=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${SORT}'))")
+
 # Assigned to current user
 curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
-  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages?filters=[{\"assignee\":{\"operator\":\"=\",\"values\":[\"me\"]}},{\"status\":{\"operator\":\"=\",\"values\":[\"${STATUS_ID}\"]}}]&sortBy=[[\"priority\",\"desc\"],[\"id\",\"asc\"]]"
+  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages?filters=${ENCODED_FILTERS}&sortBy=${ENCODED_SORT}"
 
-# All (unfiltered by assignee)
-curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
-  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages?filters=[{\"status\":{\"operator\":\"=\",\"values\":[\"${STATUS_ID}\"]}}]&sortBy=[[\"priority\",\"desc\"],[\"id\",\"asc\"]]"
+# Unassigned WPs — change filter operator to "!*" (none) with empty values
+FILTERS_UNASSIGNED='[{"assignee":{"operator":"!*","values":[]}},{"status":{"operator":"=","values":["'"${STATUS_ID}"'"]}}]'
+
+# All WPs (no assignee filter)
+FILTERS_ALL='[{"status":{"operator":"=","values":["'"${STATUS_ID}"'"]}}]'
+```
+
+Alternatively, use `--data-urlencode` with GET:
+```bash
+curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" -G \
+  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages" \
+  --data-urlencode "filters=${FILTERS}" \
+  --data-urlencode "sortBy=${SORT}" \
+  --data-urlencode "pageSize=50"
 ```
 
 ## Security Rules

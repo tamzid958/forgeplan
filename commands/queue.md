@@ -8,16 +8,24 @@ Load `.env`, `forgeplan.config.json`, and `forgeplan.local.json` as described in
 
 ## Step 2: Query OpenProject (Assigned First)
 
+Use `--data-urlencode` with `-G` (GET) to properly encode filter JSON in the URL.
+
 ### Query 1: WPs assigned to the current user
 ```bash
-curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
-  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages?filters=[{\"assignee\":{\"operator\":\"=\",\"values\":[\"me\"]}},{\"status\":{\"operator\":\"=\",\"values\":[\"${PICKUP_STATUS_ID}\"]}}]&sortBy=[[\"priority\",\"desc\"],[\"id\",\"asc\"]]"
+curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" -G \
+  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages" \
+  --data-urlencode 'filters=[{"assignee":{"operator":"=","values":["me"]}},{"status":{"operator":"=","values":["'"${PICKUP_STATUS_ID}"'"]}}]' \
+  --data-urlencode 'sortBy=[["priority","desc"],["id","asc"]]' \
+  --data-urlencode 'pageSize=50'
 ```
 
 ### Query 2: All unassigned WPs
 ```bash
-curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
-  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages?filters=[{\"assignee\":{\"operator\":\"!*\",\"values\":[]}},{\"status\":{\"operator\":\"=\",\"values\":[\"${PICKUP_STATUS_ID}\"]}}]&sortBy=[[\"priority\",\"desc\"],[\"id\",\"asc\"]]"
+curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" -G \
+  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages" \
+  --data-urlencode 'filters=[{"assignee":{"operator":"!*","values":[]}},{"status":{"operator":"=","values":["'"${PICKUP_STATUS_ID}"'"]}}]' \
+  --data-urlencode 'sortBy=[["priority","desc"],["id","asc"]]' \
+  --data-urlencode 'pageSize=50'
 ```
 
 Merge results: assigned WPs first, then unassigned. Deduplicate by ID.

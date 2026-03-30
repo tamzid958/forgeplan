@@ -20,12 +20,15 @@ If `--sprint <name>` is provided, filter by sprint (called "version" in OpenProj
 ```bash
 # Find the version ID by name
 curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
-  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/versions" \
-  | jq '.._embedded.elements[] | select(.name == "<sprint_name>") | .id'
+  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/versions"
+# Parse: ._embedded.elements[] | select(.name == "<sprint_name>") | .id
 
-# Query WPs in that version
-curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" \
-  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages?filters=[{\"version\":{\"operator\":\"=\",\"values\":[\"${VERSION_ID}\"]}}]&sortBy=[[\"priority\",\"desc\"],[\"id\",\"asc\"]]&pageSize=50"
+# Query WPs in that version (use --data-urlencode for proper encoding)
+curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" -G \
+  "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}/work_packages" \
+  --data-urlencode 'filters=[{"version":{"operator":"=","values":["'"${VERSION_ID}"'"]}}]' \
+  --data-urlencode 'sortBy=[["priority","desc"],["id","asc"]]' \
+  --data-urlencode 'pageSize=50'
 ```
 
 If no `--sprint` flag, find the current active sprint:
