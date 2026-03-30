@@ -195,8 +195,8 @@ Each step maps to a specific tool call. The LLM translates your intent into the 
 Once published, configure npm to use GitHub Packages for the `@forgeplan` scope, then install:
 
 ```bash
-echo "@forgeplan:registry=https://npm.pkg.github.com" >> .npmrc
-npm install -g @forgeplan/mcp-server
+echo "@tamzid958:registry=https://npm.pkg.github.com" >> .npmrc
+npm install -g @tamzid958/forgeplan-mcp-server
 ```
 
 Then use `forgeplan-mcp` as the command in client configs:
@@ -221,7 +221,7 @@ The package is published to GitHub Packages automatically via GitHub Actions whe
 cd mcp-server
 npm version patch   # or minor / major
 git add package.json
-git commit -m "chore: release @forgeplan/mcp-server@$(node -p 'require(\"./package.json\").version')"
+git commit -m "chore: release @tamzid958/forgeplan-mcp-server@$(node -p 'require(\"./package.json\").version')"
 git tag "mcp-server@$(node -p 'require("./package.json").version')"
 git push origin master --tags
 ```
@@ -235,7 +235,7 @@ This triggers the `.github/workflows/publish-mcp-server.yml` workflow which:
 #### 2. Verify
 
 ```bash
-npm view @forgeplan/mcp-server --registry=https://npm.pkg.github.com
+npm view @tamzid958/forgeplan-mcp-server --registry=https://npm.pkg.github.com
 ```
 
 ### Manual publish (without CI)

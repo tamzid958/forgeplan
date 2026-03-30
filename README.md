@@ -69,8 +69,8 @@ git clone https://github.com/tamzid958/forgeplan.git ~/.claude/skills/forgeplan
 Install via GitHub Packages:
 
 ```bash
-echo "@forgeplan:registry=https://npm.pkg.github.com" >> .npmrc
-npm install -g @forgeplan/mcp-server
+echo "@tamzid958:registry=https://npm.pkg.github.com" >> .npmrc
+npm install -g @tamzid958/forgeplan-mcp-server
 ```
 
 Then add to your client config (e.g., `.mcp.json`, `~/.claude/settings.json`, `.cursor/mcp.json`):
@@ -103,7 +103,7 @@ Forgeplan ships two interfaces to the same pipeline. Use whichever fits your edi
 | | Claude Code Skill | MCP Server |
 |---|---|---|
 | **Client** | Claude Code only | Any MCP client (Claude Code, Cursor, Windsurf, Continue) |
-| **Install** | `git clone` into `.claude/skills/` | `npm install -g @forgeplan/mcp-server` |
+| **Install** | `git clone` into `.claude/skills/` | `npm install -g @tamzid958/forgeplan-mcp-server` |
 | **Invoke** | `/forgeplan wp 42` | Natural language: "Process work package #42" |
 | **Transport** | Runs inside Claude Code session | stdio subprocess (local, no HTTP) |
 | **Code generation** | Claude Code writes files directly | Client LLM writes files; server handles everything else |
@@ -361,7 +361,7 @@ forgeplan/
     story-rules.md                # User story rules
     subtask-rules.md              # Subtask rules
   mcp-server/                     # MCP server (for Cursor, Windsurf, Continue, etc.)
-    package.json                  # @forgeplan/mcp-server — published to npm
+    package.json                  # @tamzid958/forgeplan-mcp-server — published to npm
     bin/forgeplan-mcp.ts          # stdio entry point
     src/
       index.ts                    # Server setup + tool/resource/prompt registration

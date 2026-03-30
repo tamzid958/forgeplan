@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://npm.pkg.github.com"
-          scope: "@forgeplan"
+          scope: "@tamzid958"
 
       - run: npm ci
       - run: npm run build

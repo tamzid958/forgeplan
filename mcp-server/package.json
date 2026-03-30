@@ -1,5 +1,5 @@
 {
-  "name": "@forgeplan/mcp-server",
+  "name": "@tamzid958/forgeplan-mcp-server",
   "version": "1.0.0-alpha",
   "description": "MCP server for forgeplan — bridges OpenProject work packages to AI-driven code generation",
   "type": "module",
