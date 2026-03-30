@@ -33,13 +33,14 @@ show_help() {
 forgeplan — Forge Code from Plans
 
 Usage:
-  forgeplan --init                    Interactive setup: discover statuses, map pipeline events
-  forgeplan --init-project            Scaffold per-project config files from global templates
+  forgeplan --init                    Full project setup: credentials, config, statuses — all in one
+  forgeplan --remap-statuses          Re-run just the OpenProject status mapping
   forgeplan --doctor                  Run full health check diagnostic
   forgeplan --wp <ID>                 Process a single work package
   forgeplan --batch <ID1,ID2,ID3>    Process multiple work packages sequentially
   forgeplan --queue                   Auto-discover and process all ready WPs
   forgeplan --rollback <ID>           Undo a previous generation: close PR, delete branch, revert status
+  forgeplan --update                  Update forgeplan to the latest version
   forgeplan --uninstall               Remove forgeplan from your system
 
 Options:
@@ -111,7 +112,79 @@ handle_uninstall() {
 }
 
 # ---------------------------------------------------------------------------
-# --init-project handler
+# --update handler
+# ---------------------------------------------------------------------------
+handle_update() {
+  local repo_url="https://github.com/tamzid958/forgeplan.git"
+  local bindir datadir prefix
+
+  # Determine current install location
+  if [[ "$FP_INSTALL_DIR" != "__INSTALL_DIR__" && "$FP_INSTALL_DIR" != "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)" ]]; then
+    datadir="$FP_INSTALL_DIR"
+    bindir="$(dirname "$datadir")/bin"
+    prefix="$(dirname "$datadir" | sed 's|/share$||')"
+  else
+    local self_path
+    self_path="$(command -v forgeplan 2>/dev/null || echo "")"
+    if [[ -n "$self_path" ]]; then
+      bindir="$(dirname "$self_path")"
+      prefix="$(dirname "$bindir")"
+      datadir="${prefix}/share/forgeplan"
+    else
+      echo "ERROR: Cannot determine install location." >&2
+      exit 3
+    fi
+  fi
+
+  local old_version
+  old_version="$(cat "$datadir/VERSION" 2>/dev/null || echo "unknown")"
+
+  # Check latest version from remote before cloning
+  echo "Checking for updates..."
+  local remote_version
+  remote_version="$(curl -fsSL "https://raw.githubusercontent.com/tamzid958/forgeplan/master/VERSION" 2>/dev/null || echo "")"
+
+  if [[ -z "$remote_version" ]]; then
+    echo "ERROR: Failed to check latest version." >&2
+    exit 1
+  fi
+
+  if [[ "$old_version" == "$remote_version" ]]; then
+    echo "✅ forgeplan is already up to date (${old_version})"
+    return 0
+  fi
+
+  echo "New version available: ${old_version} → ${remote_version}"
+  echo "Downloading..."
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  trap "rm -rf '$tmpdir'" RETURN
+
+  git clone --depth 1 "$repo_url" "$tmpdir" 2>/dev/null || {
+    echo "ERROR: Failed to download latest version." >&2
+    exit 1
+  }
+
+  # Re-run install from the downloaded copy
+  mkdir -p "${bindir}" "${datadir}/lib"
+
+  sed "s|FP_INSTALL_DIR=__INSTALL_DIR__|FP_INSTALL_DIR=${datadir}|" \
+    "${tmpdir}/forgeplan.sh" > "${bindir}/forgeplan"
+  chmod +x "${bindir}/forgeplan"
+
+  cp "${tmpdir}"/lib/*.sh "${datadir}/lib/"
+  cp "${tmpdir}"/prompt.template*.md "${datadir}/" 2>/dev/null || true
+  cp "${tmpdir}/.env.example" "${datadir}/"
+  cp "${tmpdir}/forgeplan.config.json.example" "${datadir}/"
+  cp "${tmpdir}/VERSION" "${datadir}/"
+
+  echo ""
+  echo "✅ forgeplan updated: ${old_version} → ${remote_version}"
+}
+
+# ---------------------------------------------------------------------------
+# --init handler
 # ---------------------------------------------------------------------------
 handle_init_project() {
   echo "forgeplan — Project Setup"
@@ -161,9 +234,43 @@ handle_init_project() {
     _init_gitignore_generate
   fi
 
+  # --- Step 5: Map OpenProject statuses ---
   echo ""
-  echo "✅ Project initialized. Next step:"
-  echo "   Run: forgeplan --init"
+  echo "--- OpenProject Status Mapping ---"
+  echo ""
+
+  if [[ -f ".env" ]]; then
+    source "${FP_INSTALL_DIR}/lib/config.sh"
+    config_load ""
+    config_defaults
+
+    source "${FP_INSTALL_DIR}/lib/init.sh"
+    init_validate_connection
+    init_validate_project
+    echo ""
+    echo "Discovering statuses..."
+    init_discover_statuses
+    init_display_statuses
+
+    init_prompt_mapping "pickup_status" \
+      "Which status marks a WP as ready for code generation? (used by --queue to find work)"
+    init_prompt_mapping "in_progress_status" \
+      "Which status should be set when the tool starts processing a WP?"
+    init_prompt_mapping "success_status" \
+      "Which status should be set when code generation and validation both pass?"
+    init_prompt_mapping "partial_status" \
+      "Which status should be set when code is generated but validation fails?"
+    init_prompt_mapping "failure_status" \
+      "Which status should be set when generation produces no output? (enter 0 for no change)"
+
+    init_write_config
+  else
+    echo "⚠️  Skipping status mapping (.env not found)."
+    echo "   Run: forgeplan --remap-statuses"
+  fi
+
+  echo ""
+  echo "✅ Project initialized."
 }
 
 # ---------------------------------------------------------------------------
@@ -252,7 +359,7 @@ _init_env_interactive() {
 
   # Write .env
   cat > .env <<ENVFILE
-# forgeplan — Environment Configuration (generated by --init-project)
+# forgeplan — Environment Configuration (generated by --init)
 
 # --- Required ---
 OP_BASE_URL="${op_base_url}"
@@ -448,7 +555,7 @@ _init_claude_md_fallback() {
   cat > CLAUDE.md <<'FALLBACK'
 # Project Conventions
 
-<!-- Generated by forgeplan --init-project -->
+<!-- Generated by forgeplan --init -->
 <!-- Edit this file with your project's actual conventions -->
 <!-- Claude Code reads this before every task -->
 
@@ -581,9 +688,9 @@ parse_args() {
       --init)
         [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --init with --$COMMAND" >&2; exit 3; }
         COMMAND="init"; shift ;;
-      --init-project)
-        [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --init-project with --$COMMAND" >&2; exit 3; }
-        COMMAND="init_project"; shift ;;
+      --remap-statuses)
+        [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --remap-statuses with --$COMMAND" >&2; exit 3; }
+        COMMAND="remap_statuses"; shift ;;
       --doctor)
         [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --doctor with --$COMMAND" >&2; exit 3; }
         COMMAND="doctor"; shift ;;
@@ -599,6 +706,9 @@ parse_args() {
       --rollback)
         [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --rollback with --$COMMAND" >&2; exit 3; }
         COMMAND="rollback"; COMMAND_ARG="${2:?ERROR: --rollback requires a work package ID}"; shift 2 ;;
+      --update)
+        [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --update with --$COMMAND" >&2; exit 3; }
+        COMMAND="update"; shift ;;
       --uninstall)
         [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --uninstall with --$COMMAND" >&2; exit 3; }
         COMMAND="uninstall"; shift ;;
@@ -952,7 +1062,7 @@ doctor_run() {
       mapping_count=$(jq '[.statuses.pickup_status, .statuses.in_progress_status, .statuses.success_status, .statuses.partial_status] | map(select(. != null)) | length' "$config_path" 2>/dev/null || echo 0)
       _doc_ok "Status mappings: ${mapping_count} configured in forgeplan.config.json"
     else
-      _doc_fail "Status mappings not found in forgeplan.config.json. Run: forgeplan --init"
+      _doc_fail "Status mappings not found in forgeplan.config.json. Run: forgeplan --remap-statuses"
     fi
   fi
 
@@ -1372,6 +1482,57 @@ _cleanup() {
 }
 
 # ===========================================================================
+# Update check (daily, non-blocking)
+# ===========================================================================
+check_for_update() {
+  local cache_file="${TMPDIR:-/tmp}/forgeplan-update-check"
+  local cache_max_age=86400  # 24 hours
+
+  # Skip for update/uninstall/version/help commands
+  case "${COMMAND:-}" in
+    update|uninstall) return ;;
+  esac
+
+  # Skip if VERSION file doesn't exist (dev/uninstalled mode)
+  [[ -f "$FP_VERSION_FILE" ]] || return
+
+  # Check cache age — skip if checked recently
+  if [[ -f "$cache_file" ]]; then
+    local cache_age
+    local now
+    now=$(date +%s)
+    cache_age=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)
+    if (( now - cache_age < cache_max_age )); then
+      # Show cached result if update was available
+      local cached
+      cached="$(cat "$cache_file")"
+      if [[ -n "$cached" && "$cached" != "up-to-date" ]]; then
+        echo "⬆  Update available: $(cat "$FP_VERSION_FILE") → ${cached} — run 'forgeplan --update'"
+      fi
+      return
+    fi
+  fi
+
+  # Fetch remote version with short timeout (non-blocking on failure)
+  local remote_version
+  remote_version="$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/tamzid958/forgeplan/master/VERSION" 2>/dev/null || echo "")"
+
+  if [[ -z "$remote_version" ]]; then
+    return  # network issue, skip silently
+  fi
+
+  local local_version
+  local_version="$(cat "$FP_VERSION_FILE")"
+
+  if [[ "$local_version" != "$remote_version" ]]; then
+    echo "$remote_version" > "$cache_file"
+    echo "⬆  Update available: ${local_version} → ${remote_version} — run 'forgeplan --update'"
+  else
+    echo "up-to-date" > "$cache_file"
+  fi
+}
+
+# ===========================================================================
 # Main
 # ===========================================================================
 
@@ -1379,9 +1540,12 @@ main() {
   parse_args "$@"
   trap _cleanup EXIT
 
+  # Check for updates (daily, non-blocking)
+  check_for_update
+
   # Source lib modules for commands that need them (requires bash 4+)
   case "$COMMAND" in
-    init|single|batch|queue|rollback|doctor)
+    init|remap_statuses|single|batch|queue|rollback|doctor)
       if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
         echo "ERROR: forgeplan requires bash >= 4.0 (you have ${BASH_VERSION})" >&2
         echo "On macOS: brew install bash" >&2
@@ -1398,11 +1562,11 @@ main() {
   esac
 
   case "$COMMAND" in
-    init_project)
+    init)
       handle_init_project
       ;;
 
-    init)
+    remap_statuses)
       source "${FP_INSTALL_DIR}/lib/init.sh"
       config_load "${FLAG_ENV_PATH:-}"
       config_defaults
@@ -1451,6 +1615,10 @@ main() {
       config_load_json "${FLAG_CONFIG_PATH:-}"
       config_load_statuses
       handle_rollback "$COMMAND_ARG"
+      ;;
+
+    update)
+      handle_update
       ;;
 
     uninstall)

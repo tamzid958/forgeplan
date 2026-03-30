@@ -207,7 +207,7 @@ init_write_config() {
   config_file=$(resolve_config "forgeplan.config.json")
 
   if [[ -z "$config_file" || ! -f "$config_file" ]]; then
-    echo "ERROR: forgeplan.config.json not found. Run forgeplan --init-project first." >&2
+    echo "ERROR: forgeplan.config.json not found. Run forgeplan --init first." >&2
     exit 3
   fi
 

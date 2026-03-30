@@ -194,26 +194,21 @@ Here's the fastest path from zero to generating code:
 
 ```bash
 cd /path/to/your-project
-forgeplan --init-project
+forgeplan --init
 ```
 
-This runs an interactive setup that does three things:
+This runs an interactive setup that does everything in one go:
 
-1. **Credentials** — prompts you for OpenProject URL, API key, git hosting, etc.
-2. **Layer config** — Claude Code analyzes your repo and generates `forgeplan.config.json`
-3. **CLAUDE.md** — Claude Code analyzes your codebase conventions and generates `CLAUDE.md`
-4. **.gitignore** — Claude Code generates a project-appropriate `.gitignore` (if one doesn't exist)
-
-**1. Credentials** — it prompts you for each value, one at a time:
+1. **Credentials** — prompts you for OpenProject URL, API key, git hosting, etc. → creates `.env`
+2. **Layer config** — Claude Code analyzes your repo → generates `forgeplan.config.json`
+3. **CLAUDE.md** — Claude Code analyzes your codebase conventions → generates `CLAUDE.md`
+4. **.gitignore** — generates a project-appropriate `.gitignore` (if one doesn't exist)
+5. **Status mapping** — connects to OpenProject, discovers statuses, maps pipeline events
 
 ```
 --- OpenProject Connection ---
 
 OpenProject URL (e.g., https://op.example.com): https://op.mycompany.com
-
-You need an API token from OpenProject.
-  → Log in → Avatar (top right) → My account → Access tokens → Generate → API
-
 OpenProject API key: opapi-xxxxxxxxxxxx
 OpenProject project slug (from the URL, e.g., 'my-project'): earn-lged
 Repository root path [/home/dev/my-repo]: /home/dev/my-repo
@@ -223,43 +218,14 @@ Repository root path [/home/dev/my-repo]: /home/dev/my-repo
 Git hosting platform (github/gitlab/bitbucket) [skip]: github
 Personal access token for github: ghp_xxxxxxxxxxxx
 Repository slug (e.g., org/repo-name): my-org/my-repo
-PR reviewer usernames, comma-separated [skip]: alice,bob
-
---- Optional Settings (press Enter for defaults) ---
-
-Base branch for new feature branches [develop]: develop
-Claude model [claude-sonnet-4-20250514]:
-Validation command after generation (e.g., 'npm run build') [none]: npm run build
 
 ✅ .env created
-```
 
-**2. Layer config** — Claude Code automatically analyzes your repository structure and generates `forgeplan.config.json`:
-
-```
 Analyzing repository structure with Claude Code...
-(This may take 30-60 seconds)
-
 ✅ forgeplan.config.json generated
 
-Detected layers:
-  - backend: src/backend (ASP.NET 8, C#, Entity Framework Core)
-  - frontend: src/frontend (Next.js 14, TypeScript, Tailwind CSS)
-```
+--- OpenProject Status Mapping ---
 
-**What is a "layer"?** A layer is a part of your codebase (backend, frontend, mobile, etc.). Forgeplan uses the work package's category (or another field) to decide which layer(s) to target. Claude Code figures out your layers by looking at your actual project structure, package files, and source code.
-
-If Claude Code isn't installed yet, it falls back to a template you can edit manually.
-
-### Step 2: Map your OpenProject statuses
-
-```bash
-forgeplan --init
-```
-
-This connects to your OpenProject instance, discovers all available statuses, and asks you to map each pipeline event:
-
-```
 ✅ Connected to OpenProject 14.2.0 at https://your-openproject.example.com
 ✅ Project found: My Project
 
@@ -275,11 +241,16 @@ Select status number [1-5]: 2
 
 Which status should be set when the tool starts processing?
 Select status number [1-5]: 3
-
 ...
+
+✅ Project initialized.
 ```
 
-### Step 3: Run the health check
+**What is a "layer"?** A layer is a part of your codebase (backend, frontend, mobile, etc.). Forgeplan uses the work package's category (or another field) to decide which layer(s) to target. Claude Code figures out your layers by looking at your actual project structure, package files, and source code.
+
+> **Tip:** To re-run just the status mapping later (e.g., after adding new statuses in OpenProject), use `forgeplan --remap-statuses`.
+
+### Step 2: Run the health check
 
 ```bash
 forgeplan --doctor
@@ -287,7 +258,7 @@ forgeplan --doctor
 
 This verifies everything is set up correctly. Fix any failures before proceeding.
 
-### Step 4: Generate code!
+### Step 3: Generate code!
 
 ```bash
 # Preview what would happen (safe, no changes)
@@ -325,7 +296,7 @@ See [.env.example](.env.example) for the complete list with descriptions.
 
 This is the **single config file** for your project. It contains layers, routing, hooks, and status mappings — everything in one place.
 
-`forgeplan --init-project` generates the layers/routing section (via Claude Code), and `forgeplan --init` adds the statuses section. Here's what a complete file looks like:
+`forgeplan --init` generates the layers/routing section (via Claude Code) and maps the statuses section. Here's what a complete file looks like:
 
 ```json
 {
@@ -384,16 +355,16 @@ This is the **single config file** for your project. It contains layers, routing
 
 | Section | What It Does | Set By |
 |---------|-------------|--------|
-| **`layers`** | Maps parts of your codebase — directory, tech stack, file patterns, build command | `--init-project` (auto-generated by Claude Code) |
-| **`routingField`** | Which WP field determines the target layer (`"category"`, `"type"`, or a custom field) | `--init-project` |
-| **`routingMap`** | Maps routing field values to layer names (string for one layer, array for multiple) | `--init-project` |
-| **`defaultLayer`** | Fallback layer when the WP's routing field doesn't match any entry | `--init-project` |
+| **`layers`** | Maps parts of your codebase — directory, tech stack, file patterns, build command | `--init` (auto-generated by Claude Code) |
+| **`routingField`** | Which WP field determines the target layer (`"category"`, `"type"`, or a custom field) | `--init` |
+| **`routingMap`** | Maps routing field values to layer names (string for one layer, array for multiple) | `--init` |
+| **`defaultLayer`** | Fallback layer when the WP's routing field doesn't match any entry | `--init` |
 | **`hooks`** | Custom scripts that run at pipeline stages (see [Hooks](#hooks)) | Manual edit |
-| **`statuses`** | OpenProject status mappings + cached status IDs | `--init` (interactive) |
+| **`statuses`** | OpenProject status mappings + cached status IDs | `--init` or `--init` |
 
 #### Status mappings (`statuses` section)
 
-Run `forgeplan --init` to populate this section. It connects to OpenProject, discovers all available statuses, and asks you to map each pipeline event:
+Run `forgeplan --remap-statuses` to populate this section. It connects to OpenProject, discovers all available statuses, and asks you to map each pipeline event:
 
 | Key | What It Means |
 |-----|---------------|
@@ -612,7 +583,7 @@ Forgeplan checks the project directory first, then falls back to the global inst
 
 `CLAUDE.md` is the file Claude Code reads before every task to understand your project's conventions. **This is the most important file for generation quality.**
 
-`forgeplan --init-project` automatically generates it by having Claude Code analyze your codebase — it detects your tech stack, naming patterns, architecture, build commands, and testing conventions from the actual code.
+`forgeplan --init` automatically generates it by having Claude Code analyze your codebase — it detects your tech stack, naming patterns, architecture, build commands, and testing conventions from the actual code.
 
 ```
 Generating CLAUDE.md by analyzing your codebase with Claude Code...
@@ -677,14 +648,14 @@ brew install bash
 
 ### "ERROR: .env not found"
 
-Run `forgeplan --init-project` in your project directory to scaffold config files.
+Run `forgeplan --init` in your project directory to scaffold config files.
 
 ### "ERROR: Status mapping not found in forgeplan.config.json"
 
-Your `forgeplan.config.json` is missing the `statuses` section. Run `forgeplan --init` to add it:
+Your `forgeplan.config.json` is missing the `statuses` section. Run `forgeplan --remap-statuses` to add it:
 
 ```bash
-forgeplan --init
+forgeplan --remap-statuses
 ```
 
 This connects to OpenProject, shows you all available statuses, and adds a `"statuses": { ... }` section to your existing `forgeplan.config.json`. See the [full JSON example](#project-config-forgeplanconfigjson) above.
@@ -778,13 +749,14 @@ cat logs/run-summary.jsonl | jq .
 
 | Command | Description |
 |---------|-------------|
-| `forgeplan --init` | Interactive first-time setup (map OpenProject statuses) |
-| `forgeplan --init-project` | Scaffold `.env` and `forgeplan.config.json` from templates |
+| `forgeplan --init` | Full project setup: credentials, config, statuses — all in one |
+| `forgeplan --remap-statuses` | Re-run just the OpenProject status mapping |
 | `forgeplan --doctor` | Run diagnostic health check |
 | `forgeplan --wp <ID>` | Process a single work package |
 | `forgeplan --batch <ID,ID,ID>` | Process multiple WPs sequentially |
 | `forgeplan --queue` | Auto-discover and process all ready WPs |
 | `forgeplan --rollback <ID>` | Undo: close PR, delete branch, revert status |
+| `forgeplan --update` | Update forgeplan to the latest version |
 | `forgeplan --uninstall` | Remove forgeplan from your system |
 | `forgeplan --help` | Print help |
 | `forgeplan --version` | Print version |

@@ -38,7 +38,7 @@ config_load() {
   fi
 
   if [[ -z "$env_path" || ! -f "$env_path" ]]; then
-    echo "ERROR: .env not found. Run forgeplan --init-project to scaffold config files." >&2
+    echo "ERROR: .env not found. Run forgeplan --init to scaffold config files." >&2
     exit 3
   fi
 
@@ -113,7 +113,7 @@ config_load_json() {
   fi
 
   if [[ -z "$config_path" || ! -f "$config_path" ]]; then
-    echo "ERROR: forgeplan.config.json not found. Run forgeplan --init-project to scaffold config files." >&2
+    echo "ERROR: forgeplan.config.json not found. Run forgeplan --init to scaffold config files." >&2
     exit 3
   fi
 
@@ -301,6 +301,6 @@ config_validate_all() {
 
   # Warn if CLAUDE.md is missing (non-fatal)
   if [[ ! -f "${REPO_ROOT}/CLAUDE.md" ]]; then
-    log_warn "CLAUDE.md not found in REPO_ROOT. Run 'forgeplan --init-project' to generate one, or create it manually."
+    log_warn "CLAUDE.md not found in REPO_ROOT. Run 'forgeplan --init' to generate one, or create it manually."
   fi
 }

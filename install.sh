@@ -202,7 +202,7 @@ do_install() {
   echo ""
   echo "Next steps:"
   echo "  cd /path/to/your-project"
-  echo "  forgeplan --init-project    # interactive setup"
+  echo "  forgeplan --init    # interactive setup"
   echo "  forgeplan --init            # map OpenProject statuses"
   echo "  forgeplan --doctor          # verify everything works"
 }
