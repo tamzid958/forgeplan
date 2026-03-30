@@ -40,6 +40,7 @@ Usage:
   forgeplan --batch <ID1,ID2,ID3>    Process multiple work packages sequentially
   forgeplan --queue                   Auto-discover and process all ready WPs
   forgeplan --rollback <ID>           Undo a previous generation: close PR, delete branch, revert status
+  forgeplan --uninstall               Remove forgeplan from your system
 
 Options:
   --dry-run                Print all actions without executing
@@ -65,6 +66,48 @@ Exit Codes:
   4  Git/lock error
   5  OpenProject API error
 USAGE
+}
+
+# ---------------------------------------------------------------------------
+# --uninstall handler
+# ---------------------------------------------------------------------------
+handle_uninstall() {
+  local bindir datadir
+  local self_path
+  self_path="$(command -v forgeplan 2>/dev/null || echo "")"
+
+  if [[ "$FP_INSTALL_DIR" != "__INSTALL_DIR__" && "$FP_INSTALL_DIR" != "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" ]]; then
+    # Installed via install.sh — derive paths from FP_INSTALL_DIR
+    datadir="$FP_INSTALL_DIR"
+    bindir="$(dirname "$datadir")/bin"
+  elif [[ -n "$self_path" ]]; then
+    bindir="$(dirname "$self_path")"
+    datadir="$(dirname "$bindir")/share/forgeplan"
+  else
+    echo "ERROR: Cannot determine install location." >&2
+    echo "If you installed manually, remove the 'forgeplan' binary and its share directory." >&2
+    exit 3
+  fi
+
+  echo "Uninstalling forgeplan..."
+
+  if [[ -f "${bindir}/forgeplan" ]]; then
+    rm -f "${bindir}/forgeplan"
+    echo "  Removed ${bindir}/forgeplan"
+  else
+    echo "  ${bindir}/forgeplan not found (already removed?)"
+  fi
+
+  if [[ -d "${datadir}" ]]; then
+    rm -rf "${datadir}"
+    echo "  Removed ${datadir}/"
+  else
+    echo "  ${datadir}/ not found (already removed?)"
+  fi
+
+  echo ""
+  echo "✅ forgeplan uninstalled"
+  echo "   Per-project files (.env, forgeplan.config.json) are NOT removed."
 }
 
 # ---------------------------------------------------------------------------
@@ -556,6 +599,9 @@ parse_args() {
       --rollback)
         [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --rollback with --$COMMAND" >&2; exit 3; }
         COMMAND="rollback"; COMMAND_ARG="${2:?ERROR: --rollback requires a work package ID}"; shift 2 ;;
+      --uninstall)
+        [[ -n "$COMMAND" ]] && { echo "ERROR: Cannot combine --uninstall with --$COMMAND" >&2; exit 3; }
+        COMMAND="uninstall"; shift ;;
       --dry-run)       FLAG_DRY_RUN=true; shift ;;
       --skip-pr)       FLAG_SKIP_PR=true; shift ;;
       --skip-push)     FLAG_SKIP_PUSH=true; shift ;;
@@ -1405,6 +1451,10 @@ main() {
       config_load_json "${FLAG_CONFIG_PATH:-}"
       config_load_statuses
       handle_rollback "$COMMAND_ARG"
+      ;;
+
+    uninstall)
+      handle_uninstall
       ;;
   esac
 }

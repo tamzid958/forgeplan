@@ -139,27 +139,23 @@ After installing, either:
 
 ## Installation
 
-### Option A: Global Install (recommended)
+### Option A: One-liner (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tamzid958/forgeplan/master/install.sh | bash
+```
+
+Custom install location (no sudo needed):
+```bash
+curl -fsSL https://raw.githubusercontent.com/tamzid958/forgeplan/master/install.sh | bash -s -- --prefix ~/.local
+```
+
+### Option B: Clone & Install
 
 ```bash
 git clone https://github.com/tamzid958/forgeplan.git
 cd forgeplan
 ./install.sh
-```
-
-This checks your dependencies, then installs `forgeplan` to `/usr/local/bin/` so you can run it from anywhere.
-
-Custom install location (no sudo needed):
-```bash
-./install.sh --prefix ~/.local
-```
-
-### Option B: Run Directly (no install)
-
-```bash
-git clone https://github.com/tamzid958/forgeplan.git
-cd forgeplan
-bash forgeplan.sh --help
 ```
 
 ### Verify Installation
@@ -180,7 +176,7 @@ forgeplan --version
 ### Uninstall
 
 ```bash
-./install.sh --uninstall
+forgeplan --uninstall
 ```
 
 ---
@@ -772,6 +768,7 @@ cat logs/run-summary.jsonl | jq .
 | `forgeplan --batch <ID,ID,ID>` | Process multiple WPs sequentially |
 | `forgeplan --queue` | Auto-discover and process all ready WPs |
 | `forgeplan --rollback <ID>` | Undo: close PR, delete branch, revert status |
+| `forgeplan --uninstall` | Remove forgeplan from your system |
 | `forgeplan --help` | Print help |
 | `forgeplan --version` | Print version |
 

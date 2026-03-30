@@ -13,6 +13,8 @@ set -euo pipefail
 PREFIX="/usr/local"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="install"
+REMOTE_INSTALL=false
+REPO_URL="https://github.com/tamzid958/forgeplan.git"
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -214,8 +216,31 @@ do_uninstall() {
 }
 
 # ---------------------------------------------------------------------------
+# Remote install: clone repo to temp dir if script is piped or not in repo
+# ---------------------------------------------------------------------------
+setup_script_dir() {
+  if [[ ! -f "${SCRIPT_DIR}/forgeplan.sh" ]]; then
+    REMOTE_INSTALL=true
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    echo "Downloading forgeplan..."
+    git clone --depth 1 "${REPO_URL}" "${tmpdir}" 2>/dev/null
+    SCRIPT_DIR="${tmpdir}"
+  fi
+}
+
+cleanup_remote() {
+  if [[ "$REMOTE_INSTALL" == true && -d "$SCRIPT_DIR" ]]; then
+    rm -rf "$SCRIPT_DIR"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
+setup_script_dir
+trap cleanup_remote EXIT
+
 case "$ACTION" in
   install)    do_install ;;
   uninstall)  do_uninstall ;;
