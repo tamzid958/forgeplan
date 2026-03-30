@@ -11,7 +11,7 @@ set -euo pipefail
 # Defaults
 # ---------------------------------------------------------------------------
 PREFIX="/usr/local"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 ACTION="install"
 REMOTE_INSTALL=false
 REPO_URL="https://github.com/tamzid958/forgeplan.git"
