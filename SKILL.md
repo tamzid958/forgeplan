@@ -192,6 +192,20 @@ curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" -G \
   --data-urlencode "pageSize=50"
 ```
 
+## Clarification Protocol
+
+Before claiming any WP (Step 6 in `commands/wp.md`), you MUST run the quality gate (Step 5). This step evaluates whether the WP has enough information for correct code generation.
+
+**Behavior rules:**
+- Hard blocks (empty, placeholder, duplicate descriptions) → STOP, ask user to fix
+- Type-specific checks (missing acceptance criteria, no repro steps, etc.) → collect all warnings, present as numbered questions
+- Always wait for the user to respond before proceeding — never auto-skip clarification
+- If the user says "proceed" without answering, log assumptions with `[ASSUMPTION]` tags
+- Assumptions carry through to code generation (Step 8b) and appear in the PR body (Step 8h)
+- Never update the WP description in OpenProject unless the user explicitly asks
+
+The generation rules in `prompts/` each have a "Using Clarification Context" section that explains how to apply the user's answers during code generation.
+
 ## Security Rules
 
 - NEVER print or echo `OP_API_KEY` to the conversation
