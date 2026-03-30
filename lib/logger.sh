@@ -37,7 +37,7 @@ log_init() {
   local timestamp
   timestamp=$(date +"%Y%m%d-%H%M%S")
 
-  mkdir -p "${LOG_DIR:-./ logs}"
+  mkdir -p "${LOG_DIR:-./logs}"
   LOG_FILE="${LOG_DIR:-./logs}/wp-${wp_id}-${timestamp}.log"
 
   local iso_ts

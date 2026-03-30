@@ -457,12 +457,20 @@ rollback_close_pr() {
   local pr_url="$1"
 
   if [[ "$pr_url" == *"github.com"* ]]; then
+    # Resolve token from CLI auth
+    local token
+    token="$(_resolve_git_token "github")"
+    if [[ -z "$token" ]]; then
+      log_warn "No GitHub auth token. Close PR manually: ${pr_url}"
+      return 0
+    fi
+
     # Extract owner/repo/number from URL
     local pr_path
     pr_path=$(echo "$pr_url" | sed 's|.*github.com/||;s|/pull/|/pulls/|')
     local api_url="https://api.github.com/repos/${pr_path}"
     curl --silent --max-time 15 \
-      -H "Authorization: Bearer ${GIT_HOST_TOKEN}" \
+      -H "Authorization: Bearer ${token}" \
       -H "Accept: application/vnd.github+json" \
       -X PATCH \
       --data '{"state":"closed"}' \

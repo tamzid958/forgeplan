@@ -26,12 +26,12 @@ init_validate_connection() {
     "${OP_BASE_URL}/api/v3" 2>/dev/null) || true
 
   if [[ "$tmp_code" == "000" ]]; then
-    echo "ERROR: Cannot reach ${OP_BASE_URL}. Verify OP_BASE_URL in .env" >&2
+    echo "ERROR: Cannot reach ${OP_BASE_URL}. Verify openproject.url in forgeplan.config.json" >&2
     exit 5
   fi
 
   if [[ "$tmp_code" == "401" ]]; then
-    echo "ERROR: Authentication failed. Verify OP_API_KEY in .env" >&2
+    echo "ERROR: Authentication failed. Verify OP_API_KEY in .env or re-run forgeplan --init" >&2
     exit 5
   fi
 
@@ -62,7 +62,7 @@ init_validate_project() {
     "${OP_BASE_URL}/api/v3/projects/${OP_PROJECT_ID}" 2>/dev/null) || true
 
   if [[ "$tmp_code" == "404" ]]; then
-    echo "ERROR: Project '${OP_PROJECT_ID}' not found. Verify OP_PROJECT_ID in .env" >&2
+    echo "ERROR: Project '${OP_PROJECT_ID}' not found. Verify openproject.projectId in forgeplan.config.json" >&2
     exit 5
   fi
 

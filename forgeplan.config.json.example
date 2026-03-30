@@ -1,4 +1,8 @@
 {
+  "openproject": {
+    "url": "https://op.example.com",
+    "projectId": "my-project"
+  },
   "layers": {
     "backend": {
       "path": "src/backend",
@@ -10,7 +14,10 @@
       "path": "src/frontend",
       "techStack": "Next.js 14, TypeScript, Tailwind CSS",
       "filePatterns": ["**/*.tsx", "**/*.ts"],
-      "buildCmd": "npm run build"
+      "buildCmd": "npm run build",
+      "openproject": {
+        "projectId": "frontend-project"
+      }
     }
   },
   "routingField": "category",
@@ -20,9 +27,10 @@
     "Full-Stack": ["backend", "frontend"]
   },
   "defaultLayer": "backend",
+  "reviewers": ["alice", "bob"],
   "hooks": {},
   "statuses": {
-    "_comment": "Run 'forgeplan --init' to populate this section automatically",
+    "_comment": "Run 'forgeplan --remap-statuses' to populate this section",
     "pickup_status": null,
     "in_progress_status": null,
     "success_status": null,

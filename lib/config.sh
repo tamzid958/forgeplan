@@ -69,7 +69,13 @@ config_load() {
 # ---------------------------------------------------------------------------
 config_defaults() {
   : "${GIT_REMOTE:=origin}"
-  : "${GIT_BASE_BRANCH:=develop}"
+  # Derive base branch from remote HEAD if not set
+  if [[ -z "${GIT_BASE_BRANCH:-}" && -n "${REPO_ROOT:-}" ]]; then
+    local ref
+    ref=$(git -C "$REPO_ROOT" symbolic-ref "refs/remotes/${GIT_REMOTE}/HEAD" 2>/dev/null || echo "")
+    GIT_BASE_BRANCH="${ref##refs/remotes/${GIT_REMOTE}/}"
+  fi
+  : "${GIT_BASE_BRANCH:=main}"
   : "${CLAUDE_MODEL:=claude-sonnet-4-20250514}"
   : "${LOG_DIR:=./logs}"
   : "${DRY_RUN:=false}"
