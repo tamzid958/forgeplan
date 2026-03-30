@@ -45,39 +45,22 @@ config_load() {
   # shellcheck disable=SC1090
   source "$env_path"
 
-  # Validate required variables
-  local missing=()
-  [[ -z "${OP_BASE_URL:-}" ]]   && missing+=("OP_BASE_URL")
-  [[ -z "${OP_API_KEY:-}" ]]    && missing+=("OP_API_KEY")
-  [[ -z "${OP_PROJECT_ID:-}" ]] && missing+=("OP_PROJECT_ID")
-  [[ -z "${REPO_ROOT:-}" ]]     && missing+=("REPO_ROOT")
-
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    for var in "${missing[@]}"; do
-      echo "ERROR: ${var} is required but not set in .env" >&2
-    done
+  # Validate OP_API_KEY (the only secret that must be in .env)
+  if [[ -z "${OP_API_KEY:-}" ]]; then
+    echo "ERROR: OP_API_KEY is required but not set in .env" >&2
     exit 3
   fi
 
-  # Validate OP_BASE_URL format
-  if [[ "$OP_BASE_URL" != http://* && "$OP_BASE_URL" != https://* ]]; then
-    echo "ERROR: OP_BASE_URL must start with http:// or https://" >&2
-    exit 3
-  fi
-  # Strip trailing slash
-  OP_BASE_URL="${OP_BASE_URL%/}"
-
-  # Validate REPO_ROOT
-  if [[ "$REPO_ROOT" != /* ]]; then
-    echo "ERROR: REPO_ROOT must be an absolute path (got: ${REPO_ROOT})" >&2
-    exit 3
-  fi
-  if [[ ! -d "$REPO_ROOT" ]]; then
-    echo "ERROR: REPO_ROOT directory does not exist: ${REPO_ROOT}" >&2
-    exit 3
+  # Auto-detect REPO_ROOT from git if not set
+  if [[ -z "${REPO_ROOT:-}" ]]; then
+    REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+    if [[ -z "$REPO_ROOT" ]]; then
+      echo "ERROR: Not inside a git repository. Run forgeplan from your project directory." >&2
+      exit 3
+    fi
   fi
 
-  export OP_BASE_URL OP_API_KEY OP_PROJECT_ID REPO_ROOT
+  export OP_API_KEY REPO_ROOT
 }
 
 # ---------------------------------------------------------------------------
@@ -145,6 +128,29 @@ config_load_json() {
   if [[ -n "$invalid_layers" ]]; then
     echo "ERROR: The following layers are missing required fields (path, techStack):" >&2
     echo "$invalid_layers" >&2
+    exit 3
+  fi
+
+  # Load OpenProject config from JSON (top-level defaults)
+  local op_url op_project
+  op_url=$(echo "$FP_LAYERS_JSON" | jq -r '.openproject.url // empty')
+  op_project=$(echo "$FP_LAYERS_JSON" | jq -r '.openproject.projectId // empty')
+
+  if [[ -n "$op_url" ]]; then
+    OP_BASE_URL="${op_url%/}"
+    export OP_BASE_URL
+  fi
+  if [[ -n "$op_project" ]]; then
+    OP_PROJECT_ID="$op_project"
+    export OP_PROJECT_ID
+  fi
+
+  if [[ -z "${OP_BASE_URL:-}" ]]; then
+    echo "ERROR: openproject.url is required in forgeplan.config.json" >&2
+    exit 3
+  fi
+  if [[ -z "${OP_PROJECT_ID:-}" ]]; then
+    echo "ERROR: openproject.projectId is required in forgeplan.config.json" >&2
     exit 3
   fi
 }
@@ -265,6 +271,102 @@ config_get_layers() {
 }
 
 # ---------------------------------------------------------------------------
+# config_get_layer_op_project <layer_name>
+# Return the OpenProject project ID for a layer. Falls back to top-level.
+# ---------------------------------------------------------------------------
+config_get_layer_op_project() {
+  local layer_name="$1"
+
+  local layer_project
+  layer_project=$(echo "$FP_LAYERS_JSON" | jq -r --arg l "$layer_name" '.layers[$l].openproject.projectId // empty')
+
+  if [[ -n "$layer_project" ]]; then
+    echo "$layer_project"
+  else
+    echo "${OP_PROJECT_ID}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# _resolve_layer_git_dir <layer_name>
+# Find the git root for a layer's path.
+# ---------------------------------------------------------------------------
+_resolve_layer_git_dir() {
+  local layer_name="$1"
+
+  local layer_path
+  layer_path=$(echo "$FP_LAYERS_JSON" | jq -r --arg l "$layer_name" '.layers[$l].path // empty')
+
+  local abs_path="${REPO_ROOT}/${layer_path}"
+  if [[ ! -d "$abs_path" ]]; then
+    abs_path="$REPO_ROOT"
+  fi
+
+  git -C "$abs_path" rev-parse --show-toplevel 2>/dev/null || echo "$REPO_ROOT"
+}
+
+# ---------------------------------------------------------------------------
+# config_get_layer_repo <layer_name>
+# Derive repo slug (org/repo) from git remote of the layer's path.
+# ---------------------------------------------------------------------------
+config_get_layer_repo() {
+  local layer_name="$1"
+  local git_dir
+  git_dir=$(_resolve_layer_git_dir "$layer_name")
+
+  local remote_url
+  remote_url=$(git -C "$git_dir" remote get-url origin 2>/dev/null || echo "")
+
+  if [[ -z "$remote_url" ]]; then
+    echo ""
+    return 1
+  fi
+
+  # git@github.com:org/repo.git -> org/repo
+  # https://github.com/org/repo.git -> org/repo
+  echo "$remote_url" | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#'
+}
+
+# ---------------------------------------------------------------------------
+# config_get_layer_host_type <layer_name>
+# Derive git host type (github/gitlab/bitbucket) from remote URL.
+# ---------------------------------------------------------------------------
+config_get_layer_host_type() {
+  local layer_name="$1"
+  local git_dir
+  git_dir=$(_resolve_layer_git_dir "$layer_name")
+
+  local remote_url
+  remote_url=$(git -C "$git_dir" remote get-url origin 2>/dev/null || echo "")
+
+  case "$remote_url" in
+    *github.com*)    echo "github" ;;
+    *gitlab.com*|*gitlab.*)  echo "gitlab" ;;
+    *bitbucket.org*|*bitbucket.*) echo "bitbucket" ;;
+    *) echo "" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# config_get_layer_base_branch <layer_name>
+# Derive default branch from git remote HEAD.
+# ---------------------------------------------------------------------------
+config_get_layer_base_branch() {
+  local layer_name="$1"
+  local git_dir
+  git_dir=$(_resolve_layer_git_dir "$layer_name")
+
+  local ref
+  ref=$(git -C "$git_dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo "")
+
+  if [[ -n "$ref" ]]; then
+    echo "${ref##refs/remotes/origin/}"
+  else
+    echo "main"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # config_validate_all
 # Final validation after all config is loaded.
 # ---------------------------------------------------------------------------
@@ -287,16 +389,9 @@ config_validate_all() {
     exit 3
   fi
 
-  # Verify GIT_HOST_* consistency
-  if [[ -n "${GIT_HOST_TYPE:-}" ]]; then
-    if [[ -z "${GIT_HOST_TOKEN:-}" ]]; then
-      echo "ERROR: GIT_HOST_TOKEN is required when GIT_HOST_TYPE is set" >&2
-      exit 3
-    fi
-    if [[ -z "${GIT_HOST_REPO:-}" ]]; then
-      echo "ERROR: GIT_HOST_REPO is required when GIT_HOST_TYPE is set" >&2
-      exit 3
-    fi
+  # Verify GIT_HOST_TOKEN exists (needed for PR creation)
+  if [[ -z "${GIT_HOST_TOKEN:-}" ]]; then
+    log_warn "GIT_HOST_TOKEN not set. PR creation will be skipped."
   fi
 
   # Warn if CLAUDE.md is missing (non-fatal)

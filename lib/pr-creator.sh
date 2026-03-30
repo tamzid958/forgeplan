@@ -8,6 +8,46 @@
 PR_URL=""
 
 # ==========================================================================
+# Token resolution — use CLI auth (gh, glab) or fallback to env
+# ==========================================================================
+
+# ---------------------------------------------------------------------------
+# _resolve_git_token <host_type>
+# Resolve auth token from CLI tools, falling back to GIT_HOST_TOKEN env var.
+# ---------------------------------------------------------------------------
+_resolve_git_token() {
+  local host_type="$1"
+
+  case "$host_type" in
+    github)
+      # gh auth token (GitHub CLI)
+      if command -v gh > /dev/null 2>&1; then
+        local token
+        token=$(gh auth token 2>/dev/null || echo "")
+        if [[ -n "$token" ]]; then
+          echo "$token"
+          return 0
+        fi
+      fi
+      ;;
+    gitlab)
+      # glab auth (GitLab CLI)
+      if command -v glab > /dev/null 2>&1; then
+        local token
+        token=$(glab auth status -t 2>&1 | grep -oP 'Token: \K\S+' || echo "")
+        if [[ -n "$token" ]]; then
+          echo "$token"
+          return 0
+        fi
+      fi
+      ;;
+  esac
+
+  # Fallback to env var
+  echo "${GIT_HOST_TOKEN:-}"
+}
+
+# ==========================================================================
 # PR body builder
 # ==========================================================================
 
@@ -52,7 +92,7 @@ EOF
 # ==========================================================================
 
 # ---------------------------------------------------------------------------
-# pr_create <wp_id> <wp_subject> <result> <branch_name> <changed_files>
+# pr_create <wp_id> <wp_subject> <result> <branch_name> <changed_files> <repo_slug> <host_type> <base_branch>
 # Dispatch to platform-specific PR creation.
 # ---------------------------------------------------------------------------
 pr_create() {
@@ -61,10 +101,33 @@ pr_create() {
   local result="$3"
   local branch_name="$4"
   local changed_files="$5"
+  local repo_slug="${6:-}"
+  local host_type="${7:-}"
+  local base="${8:-main}"
 
-  if [[ -z "${GIT_HOST_TYPE:-}" ]]; then
-    log_info "Skipping PR creation (GIT_HOST_TYPE not configured)"
+  if [[ -z "$repo_slug" ]]; then
+    log_error "Cannot determine repo slug from git remote. Check your layer's path."
+    return 1
+  fi
+
+  if [[ -z "$host_type" ]]; then
+    log_error "Cannot determine git host type from remote URL."
+    return 1
+  fi
+
+  # Resolve auth token from CLI tools or env
+  GIT_HOST_TOKEN="$(_resolve_git_token "$host_type")"
+  if [[ -z "$GIT_HOST_TOKEN" ]]; then
+    log_info "Skipping PR creation (no auth token — run 'gh auth login' or 'glab auth login')"
     return 0
+  fi
+
+  # Set for platform-specific functions
+  GIT_HOST_REPO="$repo_slug"
+
+  # Resolve reviewers from config
+  if [[ -n "${FP_LAYERS_JSON:-}" ]]; then
+    REVIEWERS=$(echo "$FP_LAYERS_JSON" | jq -r '.reviewers // [] | join(",")' 2>/dev/null || echo "")
   fi
 
   local title
@@ -75,14 +138,13 @@ pr_create() {
 
   local body
   body=$(pr_build_body "$wp_id" "$result" "$changed_files")
-  local base="${GIT_BASE_BRANCH:-develop}"
 
-  case "${GIT_HOST_TYPE}" in
+  case "${host_type}" in
     github)   pr_create_github "$title" "$body" "$branch_name" "$base" "$wp_id" ;;
     gitlab)   pr_create_gitlab "$title" "$body" "$branch_name" "$base" "$wp_id" ;;
     bitbucket) pr_create_bitbucket "$title" "$body" "$branch_name" "$base" "$wp_id" ;;
     *)
-      log_error "Unknown GIT_HOST_TYPE: ${GIT_HOST_TYPE}. Supported: github, gitlab, bitbucket"
+      log_error "Unknown git host type: ${host_type}. Supported: github, gitlab, bitbucket"
       return 1
       ;;
   esac
