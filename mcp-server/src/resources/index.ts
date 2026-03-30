@@ -5,23 +5,17 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerState } from "../index.js";
 import { readRunLog } from "../util/logger.js";
 
-const VALID_WP_TYPES = new Set([
-  "bug",
-  "feature",
-  "epic",
-  "story",
-  "subtask",
-  "task",
-]);
-
 const TYPE_TO_FILE: Record<string, string> = {
   bug: "bug-rules.md",
   feature: "feature-rules.md",
   epic: "epic-rules.md",
   story: "story-rules.md",
+  "user story": "story-rules.md",
   subtask: "subtask-rules.md",
   task: "task-rules.md",
 };
+
+const VALID_WP_TYPES = new Set(Object.keys(TYPE_TO_FILE));
 
 function getPromptsDir(): string {
   // Resolve relative to the mcp-server package, up to forgeplan root

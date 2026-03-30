@@ -133,6 +133,7 @@ export async function loadConfig(projectRoot: string): Promise<MergedConfig> {
     reviewers: config.reviewers ?? [],
     statuses: config.statuses,
     commitTrailer: config.commitTrailer ?? null,
+    userId: local.userId ?? null,
     toolPaths,
     hookConventions,
     gitInfo,

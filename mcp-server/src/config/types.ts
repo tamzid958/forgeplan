@@ -44,6 +44,7 @@ export interface HookConventions {
 }
 
 export interface LocalConfig {
+  userId?: number | null;
   toolPaths?: Record<string, string | null>;
   hookConventions?: HookConventions;
   layerOverrides?: Record<string, Partial<LayerConfig>>;
@@ -71,6 +72,7 @@ export interface MergedConfig {
   reviewers: string[];
   statuses: StatusConfig;
   commitTrailer?: string | null;
+  userId: number | null;
   toolPaths: Record<string, string>;
   hookConventions: HookConventions;
   gitInfo: Record<string, GitInfo>;

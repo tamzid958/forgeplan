@@ -22,6 +22,7 @@ export interface WPSummary {
   status: string;
   assignee: string | null;
   category: string | null;
+  description?: string | null;
 }
 
 export interface Relation {

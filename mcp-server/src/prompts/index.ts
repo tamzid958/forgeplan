@@ -88,4 +88,81 @@ If issues are found, fix them before proceeding to commit.`,
       };
     },
   );
+
+  _server.prompt(
+    "init_project",
+    "Interactive setup: detect project structure, connect OpenProject, write config files",
+    { projectRoot: z.string().describe("Absolute path to project root") },
+    async ({ projectRoot }) => {
+      return {
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Set up forgeplan for the project at ${projectRoot}. Follow these steps in order, asking the user for input at each step:
+
+**Step 1: OpenProject Connection**
+Ask the user for:
+1. OpenProject URL (e.g. https://op.example.com)
+2. OpenProject API key — tell them: "Log in → Avatar → My account → Access tokens → Generate → API"
+3. Project slug (from the OpenProject URL)
+
+Then call \`forgeplan_init_discover_statuses\` with their answers to verify the connection, fetch the user ID, and get available statuses.
+
+Show the user: "Detected user: **{name}** (ID: {id})"
+
+**Step 2: Layer Paths**
+Ask: "Layer paths, comma-separated (e.g. \`src/backend,src/frontend\` or \`.\` for single-repo)"
+
+Then call \`forgeplan_init_probe\` with the project root and layer paths.
+
+Show the detected tech stacks, tools, hooks, and ask the user to confirm or adjust.
+
+**Step 3: Optional Settings**
+Ask for:
+- PR reviewers (comma-separated usernames, or skip)
+- Commit trailer (e.g. \`Co-Authored-By: bot <bot@noreply>\`, or skip)
+
+**Step 4: Status Mapping**
+Show the numbered status list from Step 1. Based on names, suggest mappings for:
+- pickup_status — the "ready/todo" status
+- in_progress_status — the "in progress" status
+- success_status — the "in review" or "done" status
+- partial_status — reuse in_progress or similar
+- failure_status — 0 for no change, or a specific status
+
+Ask the user to confirm or override each mapping.
+
+**Step 5: Keyword Routing (optional)**
+Ask: "Would you like to configure keyword-based routing? (For when WPs don't have a category set)"
+If yes, for each layer ask for 3-5 keywords (e.g. "api, endpoint, controller" for backend).
+
+**Step 6: Write Config**
+Assemble forgeplan.config.json and forgeplan.local.json from all answers, then call \`forgeplan_init_write_config\` to write the files.
+
+forgeplan.local.json should include:
+- userId (from Step 1)
+- toolPaths (from probe, null for on-PATH tools)
+- hookConventions (from probe)
+- layerOverrides with testCmd/lintFixCmd/formatCmd (from probe)
+
+**Step 7: Summary**
+Print:
+\`\`\`
+✓ forgeplan.config.json — shared project config
+✓ forgeplan.local.json  — local toolchain + hooks
+✓ .env                  — API key (gitignored)
+✓ .gitignore            — updated
+
+Next steps:
+  Use forgeplan_doctor to verify setup
+  Use process_work_package prompt to process a WP
+\`\`\``,
+            },
+          },
+        ],
+      };
+    },
+  );
 }

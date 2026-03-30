@@ -12,7 +12,7 @@ import {
   gitDiffNames,
   gitDeleteBranch,
 } from "../git/operations.js";
-import { createPR, closePR, editPRBody } from "../git/pr.js";
+import { createPR, closePR, getPRBody, editPRBody } from "../git/pr.js";
 import { findRunByWpId } from "../util/logger.js";
 
 function requireConfig(state: ServerState) {
@@ -389,6 +389,7 @@ export function registerGitTools(
           const gitInfo = config.gitInfo[pr.layerName];
           if (!gitInfo) continue;
 
+          const existingBody = await getPRBody(cwd, gitInfo, pr.prUrl);
           const relatedSection = [
             "\n\n### Related PRs",
             ...prs
@@ -396,9 +397,7 @@ export function registerGitTools(
               .map((other) => `- **${other.layerName}**: ${other.prUrl}`),
           ].join("\n");
 
-          // We need to get current body and append
-          // For simplicity, just edit with the related section appended
-          await editPRBody(cwd, gitInfo, pr.prUrl, relatedSection);
+          await editPRBody(cwd, gitInfo, pr.prUrl, existingBody + relatedSection);
         }
 
         return {

@@ -90,6 +90,7 @@ export class OpenProjectClient {
         status: s._links?.status?.title ?? "",
         assignee: s._links?.assignee?.title ?? null,
         category: s._links?.category?.title ?? null,
+        description: s.description?.raw?.trim() ?? null,
       }));
     }
 
@@ -315,11 +316,25 @@ export function evaluateQualityGate(
     }
   }
 
-  // Duplicate check
+  // Duplicate check — compare description against siblings
   for (const sibling of wpContext.siblings) {
-    if (sibling.id !== wp.id) {
-      // Shallow compare — full description would need deep-fetch for non-subtasks
-      // This is a best-effort check
+    if (
+      sibling.id !== wp.id &&
+      sibling.description &&
+      sibling.description.trim() === desc
+    ) {
+      return {
+        pass: false,
+        hardBlock: true,
+        warnings: [
+          {
+            check: "Duplicate description",
+            condition: `Description is identical to sibling WP #${sibling.id} ("${sibling.subject}")`,
+            question:
+              "This work package has the same description as a sibling. Is this a duplicate?",
+          },
+        ],
+      };
     }
   }
 
@@ -494,6 +509,22 @@ export function evaluateQualityGate(
         question:
           "What is the exact boundary of this subtask vs its siblings?",
       });
+    }
+    // Check if subtask references an unfinished sibling
+    const closedStatuses = ["closed", "done", "resolved", "rejected"];
+    for (const sibling of wpContext.siblings) {
+      if (
+        sibling.id !== wp.id &&
+        desc.includes(`#${sibling.id}`) &&
+        !closedStatuses.includes(sibling.status.toLowerCase())
+      ) {
+        warnings.push({
+          check: "Sibling dependency",
+          condition: `References sibling WP #${sibling.id} which is "${sibling.status}"`,
+          question:
+            `This depends on sibling WP #${sibling.id} ("${sibling.subject}") which isn't done yet. Should I proceed anyway?`,
+        });
+      }
     }
   }
 

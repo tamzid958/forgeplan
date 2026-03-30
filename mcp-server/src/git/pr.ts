@@ -96,6 +96,34 @@ export async function closePR(
   }
 }
 
+export async function getPRBody(
+  cwd: string,
+  gitInfo: GitInfo,
+  prUrl: string,
+): Promise<string> {
+  if (gitInfo.hostType === "gitlab") {
+    const result = await exec(
+      "glab",
+      ["mr", "view", prUrl, "--output", "json"],
+      { cwd },
+    );
+    if (result.exitCode !== 0) return "";
+    try {
+      const data = JSON.parse(result.stdout);
+      return data.description ?? "";
+    } catch {
+      return "";
+    }
+  } else {
+    const result = await exec(
+      "gh",
+      ["pr", "view", prUrl, "--json", "body", "--jq", ".body"],
+      { cwd },
+    );
+    return result.exitCode === 0 ? result.stdout.trim() : "";
+  }
+}
+
 export async function editPRBody(
   cwd: string,
   gitInfo: GitInfo,

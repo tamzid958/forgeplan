@@ -206,11 +206,14 @@ export function registerWPTools(
           };
         }
 
+        const assigneeFilter = config.userId
+          ? String(config.userId)
+          : "me";
         const [assigned, unassigned] = await Promise.all([
           opClient.queryByStatus(
             config.openproject.projectId,
             pickupStatus,
-            "me",
+            assigneeFilter,
           ),
           opClient.queryByStatus(
             config.openproject.projectId,

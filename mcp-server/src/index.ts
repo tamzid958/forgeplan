@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerInitTools } from "./tools/init-tools.js";
 import { registerConfigTools } from "./tools/config-tools.js";
 import { registerWPTools } from "./tools/wp-tools.js";
 import { registerOPTools } from "./tools/openproject-tools.js";
@@ -28,6 +29,7 @@ export function createServer(): McpServer {
     projectRoot: null,
   };
 
+  registerInitTools(server, state);
   registerConfigTools(server, state);
   registerWPTools(server, state);
   registerOPTools(server, state);
