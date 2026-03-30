@@ -14,6 +14,19 @@ Write `.env` with only the secret:
 OP_API_KEY=<key>
 ```
 
+## Step 1b: OpenProject User ID
+
+After verifying the API key works, fetch the current user:
+```bash
+curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" "${OP_BASE_URL}/api/v3/users/me"
+```
+
+Extract `id` and `name`. Show the user: "Detected user: **{name}** (ID: {id}). WPs will be assigned to this user."
+
+Store the user ID as `openproject.assigneeUserId` in `forgeplan.local.json` (not the shared config — this is machine/user-specific).
+
+> **Why not `/api/v3/users/me`?** OpenProject silently ignores `/api/v3/users/me` in PATCH assignee updates on some instances. Using the explicit numeric ID is reliable.
+
 ## Step 2: Layer Paths
 
 Ask: "Layer paths, comma-separated (e.g., `backend,frontend` or `.` for single-repo)"
@@ -150,9 +163,10 @@ Ask the user: "Would you like to configure keyword-based routing? (For when WPs 
 
 ### forgeplan.local.json (machine-specific, gitignored)
 
-Assemble from Steps 3b–3d:
+Assemble from Steps 1b, 3b–3d:
 ```json
 {
+  "openproject": { "assigneeUserId": <user_id> },
   "toolPaths": { ... },
   "hookConventions": { ... },
   "layerOverrides": { ... }

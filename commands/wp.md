@@ -175,14 +175,16 @@ These assumptions will be included in the PR body (Step 8h) so reviewers can ver
 
 ## Step 6: Claim Assignee and Update WP Status to In Progress
 
-Using the `lockVersion` from Step 2, update the status to `in_progress_status` from config. Also claim the WP if not already assigned to the current user:
+Using the `lockVersion` from Step 2, update the status to `in_progress_status` from config. Also claim the WP if not already assigned to the current user.
+
+**Assignee resolution:** If `openproject.assigneeUserId` is set in `forgeplan.local.json`, use `/api/v3/users/<assigneeUserId>`. Otherwise fall back to `/api/v3/users/me` (note: `/api/v3/users/me` silently fails for assignee updates on some OpenProject instances).
 
 ```bash
 curl -s -u "apikey:${OP_API_KEY}" \
   -H "Content-Type: application/json" \
   -H "Accept: application/hal+json" \
   -X PATCH \
-  --data "{\"lockVersion\": ${LOCK_VERSION}, \"_links\": {\"status\": {\"href\": \"/api/v3/statuses/${IN_PROGRESS_STATUS}\"}, \"assignee\": {\"href\": \"/api/v3/users/me\"}}}" \
+  --data "{\"lockVersion\": ${LOCK_VERSION}, \"_links\": {\"status\": {\"href\": \"/api/v3/statuses/${IN_PROGRESS_STATUS}\"}, \"assignee\": {\"href\": \"/api/v3/users/${ASSIGNEE_USER_ID}\"}}}" \
   "${OP_BASE_URL}/api/v3/work_packages/${WP_ID}"
 ```
 
