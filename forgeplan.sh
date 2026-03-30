@@ -191,23 +191,8 @@ handle_init_project() {
   echo "========================="
   echo ""
 
-  # --- Step 0: Ask for project directory ---
-  echo "Enter your project directory."
-  echo "Examples: . (current), LGED/iam, /home/dev/my-project"
-  printf "Project directory [.]: "
   local project_dir
-  read -r project_dir
-  project_dir="${project_dir:-.}"
-
-  # Resolve to absolute path
-  project_dir=$(cd "$project_dir" 2>/dev/null && pwd || echo "$project_dir")
-
-  if [[ ! -d "$project_dir" ]]; then
-    echo "ERROR: Directory does not exist: ${project_dir}" >&2
-    exit 3
-  fi
-
-  cd "$project_dir"
+  project_dir=$(pwd)
   echo "Working in: ${project_dir}"
   echo ""
 
@@ -258,55 +243,43 @@ ENVFILE
   echo ""
   echo "--- Project Layers ---"
   echo "A layer is a part of your codebase (backend, frontend, mobile, etc.)."
-  echo "Each layer has its own path, and optionally its own OpenProject project."
+  echo "Layer name is derived from the path (e.g., iam → iam, src/backend → backend, . → app)."
   echo ""
 
-  local layer_count
-  printf "How many layers? [1]: "
-  read -r layer_count
-  layer_count="${layer_count:-1}"
+  local layer_paths_input
+  printf "Layer paths, comma-separated (e.g., iam,eims-flutter or .) [.]: "
+  read -r layer_paths_input
+  layer_paths_input="${layer_paths_input:-.}"
 
-  if ! [[ "$layer_count" =~ ^[0-9]+$ ]] || [[ "$layer_count" -lt 1 ]]; then
-    echo "ERROR: Must be at least 1." >&2; exit 3
-  fi
+  # Parse comma-separated paths into array
+  local path_arr=()
+  IFS=',' read -ra path_arr <<< "$layer_paths_input"
 
-  # Collect layer details
+  # Collect details for each layer
   local layers_json="{}"
   local routing_map="{}"
   local first_layer=""
-  local i
 
-  for ((i = 1; i <= layer_count; i++)); do
-    echo ""
-    echo "--- Layer ${i} of ${layer_count} ---"
+  for raw_path in "${path_arr[@]}"; do
+    # Trim whitespace
+    local l_path
+    l_path=$(echo "$raw_path" | xargs)
+    l_path="${l_path:-.}"
 
-    local l_name l_path l_op_project
-
-    printf "Layer name (e.g., backend, frontend, mobile): "
-    read -r l_name
-    if [[ -z "$l_name" ]]; then
-      echo "ERROR: Layer name is required." >&2; exit 3
+    # Derive layer name from path
+    local l_name
+    if [[ "$l_path" == "." ]]; then
+      l_name="app"
+    else
+      l_name=$(basename "$l_path")
     fi
 
     [[ -z "$first_layer" ]] && first_layer="$l_name"
 
-    printf "Path (relative to project root, e.g., src/backend or .): "
-    read -r l_path
-    l_path="${l_path:-.}"
-
-    printf "OpenProject project slug for this layer [${op_project_id}]: "
-    read -r l_op_project
-    l_op_project="${l_op_project:-$op_project_id}"
-
     # Build layer JSON
     local layer_obj
-    if [[ "$l_op_project" != "$op_project_id" ]]; then
-      layer_obj=$(jq -n --arg p "$l_path" --arg pid "$l_op_project" \
-        '{path: $p, techStack: "", filePatterns: [], buildCmd: "", openproject: {projectId: $pid}}')
-    else
-      layer_obj=$(jq -n --arg p "$l_path" \
-        '{path: $p, techStack: "", filePatterns: [], buildCmd: ""}')
-    fi
+    layer_obj=$(jq -n --arg p "$l_path" \
+      '{path: $p, techStack: "", filePatterns: [], buildCmd: ""}')
 
     layers_json=$(echo "$layers_json" | jq --arg name "$l_name" --argjson obj "$layer_obj" '. + {($name): $obj}')
     routing_map=$(echo "$routing_map" | jq --arg key "$l_name" --arg val "$l_name" '. + {($key): $val}')

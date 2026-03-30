@@ -199,53 +199,69 @@ forgeplan --init
 
 This runs an interactive setup that does everything in one go:
 
-1. **Credentials** — prompts you for OpenProject URL, API key, git hosting, etc. → creates `.env`
-2. **Layer config** — Claude Code analyzes your repo → generates `forgeplan.config.json`
-3. **CLAUDE.md** — Claude Code analyzes your codebase conventions → generates `CLAUDE.md`
-4. **.gitignore** — generates a project-appropriate `.gitignore` (if one doesn't exist)
-5. **Status mapping** — connects to OpenProject, discovers statuses, maps pipeline events
+1. **OpenProject connection** — URL, API key, project slug → creates `.env` (secrets only)
+2. **Layers** — comma-separated paths to your code layers → layer names derived automatically
+3. **Optional settings** — PR reviewers, Claude model, validation command
+4. **Config generation** — builds `forgeplan.config.json` with all layers
+5. **Enrich with Claude Code** — optionally auto-detects tech stack, file patterns, build commands
+6. **CLAUDE.md** — generated per repo by analyzing each codebase
+7. **.gitignore** — updated per repo with forgeplan entries
+8. **Status mapping** — connects to OpenProject, discovers statuses, maps pipeline events
 
 ```
 --- OpenProject Connection ---
 
 OpenProject URL (e.g., https://op.example.com): https://op.mycompany.com
 OpenProject API key: opapi-xxxxxxxxxxxx
-OpenProject project slug (from the URL, e.g., 'my-project'): earn-lged
+Default OpenProject project slug (from the URL, e.g., 'my-project'): earn-lged
 
---- PR Creation ---
-Git host, repo, and base branch are auto-derived from git remote.
-Auth uses CLI tools (gh auth login, glab auth login).
+✅ .env created (secrets only)
+
+--- Project Layers ---
+Layer name is derived from the path (e.g., iam → iam, src/backend → backend, . → app).
+
+Layer paths, comma-separated (e.g., iam,eims-flutter or .) [.]: iam,eims-flutter
+
+--- Optional Settings ---
 
 PR reviewer usernames, comma-separated [skip]: alice,bob
+Claude model [sonnet]: sonnet
+Validation command (e.g., 'npm run build') [none]:
 
-✅ .env created
+✅ forgeplan.config.json created with 2 layer(s)
 
-Analyzing repository structure with Claude Code...
-✅ forgeplan.config.json generated
+Use Claude Code to auto-detect tech stack, file patterns, and build commands? [Y/n]: Y
+✅ Layers enriched with tech details
+  - iam: iam (ASP.NET 8, C#, Entity Framework Core)
+  - eims-flutter: eims-flutter (Flutter 3, Dart)
+
+--- Setting up: /home/dev/LGED/iam ---
+  ✅ CLAUDE.md created
+  ✅ .gitignore updated
+
+--- Setting up: /home/dev/LGED/eims-flutter ---
+  ✅ CLAUDE.md created
+  ✅ .gitignore updated
 
 --- OpenProject Status Mapping ---
 
-✅ Connected to OpenProject 14.2.0 at https://your-openproject.example.com
-✅ Project found: My Project
+✅ Connected to OpenProject 14.2.0 at https://op.mycompany.com
+✅ Project found: EARN-LGED
 
 Available statuses:
-   1. BLOCKED (open)
-   2. TO DO (open)
-   3. IN PROGRESS (open)
-   4. IN REVIEW (open)
-   5. DONE (closed)
+   1. TO DO (open)
+   2. IN PROGRESS (open)
+   3. IN REVIEW (open)
+   4. DONE (closed)
 
 Which status marks a WP as ready for code generation?
-Select status number [1-5]: 2
-
-Which status should be set when the tool starts processing?
-Select status number [1-5]: 3
+Select status number [1-4]: 1
 ...
 
 ✅ Project initialized.
 ```
 
-**What is a "layer"?** A layer is a part of your codebase (backend, frontend, mobile, etc.). Forgeplan uses the work package's category (or another field) to decide which layer(s) to target. Claude Code figures out your layers by looking at your actual project structure, package files, and source code.
+**What is a "layer"?** A layer is a part of your codebase (backend, frontend, mobile, etc.). Each layer maps to a directory path — the layer name is derived from the last segment of the path (e.g., `iam` → `iam`, `src/backend` → `backend`, `.` → `app`). Forgeplan uses the work package's category to route to the correct layer.
 
 > **Tip:** To re-run just the status mapping later (e.g., after adding new statuses in OpenProject), use `forgeplan --remap-statuses`.
 
