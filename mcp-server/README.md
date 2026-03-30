@@ -190,11 +190,12 @@ Each step maps to a specific tool call. The LLM translates your intent into the 
 
 ## Publishing
 
-### Install from npm
+### Install from GitHub Packages
 
-Once published, users can install globally and reference the binary directly:
+Once published, configure npm to use GitHub Packages for the `@forgeplan` scope, then install:
 
 ```bash
+echo "@forgeplan:registry=https://npm.pkg.github.com" >> .npmrc
 npm install -g @forgeplan/mcp-server
 ```
 
@@ -210,38 +211,11 @@ Then use `forgeplan-mcp` as the command in client configs:
 }
 ```
 
-Or use `npx` without installing:
-
-```json
-{
-  "mcpServers": {
-    "forgeplan": {
-      "command": "npx",
-      "args": ["-y", "@forgeplan/mcp-server"]
-    }
-  }
-}
-```
-
 ### Publishing workflow
 
-The package is published to npm automatically via GitHub Actions when you push a version tag.
+The package is published to GitHub Packages automatically via GitHub Actions when you push a version tag. No extra secrets needed — it uses the built-in `GITHUB_TOKEN`.
 
-#### 1. Set up npm token (one-time)
-
-Generate a token at [npmjs.com/settings/tokens](https://www.npmjs.com/settings/tokens) (type: **Automation**) and add it as a repository secret:
-
-```bash
-gh secret set NPM_TOKEN --body "npm_XXXXXXXXXX"
-```
-
-If publishing a scoped package for the first time, ensure the org exists on npm:
-
-```bash
-npm org create forgeplan
-```
-
-#### 2. Bump version and tag
+#### 1. Bump version and tag
 
 ```bash
 cd mcp-server
@@ -256,12 +230,12 @@ This triggers the `.github/workflows/publish-mcp-server.yml` workflow which:
 1. Checks out the repo
 2. Installs dependencies (`npm ci`)
 3. Builds TypeScript (`npm run build`)
-4. Publishes to npm with provenance (`npm publish --provenance --access public`)
+4. Publishes to GitHub Packages (`npm publish` using `GITHUB_TOKEN`)
 
-#### 3. Verify
+#### 2. Verify
 
 ```bash
-npm info @forgeplan/mcp-server
+npm view @forgeplan/mcp-server --registry=https://npm.pkg.github.com
 ```
 
 ### Manual publish (without CI)
@@ -269,7 +243,7 @@ npm info @forgeplan/mcp-server
 ```bash
 cd mcp-server
 npm run build
-npm publish --access public
+npm publish
 ```
 
 ## Example Orchestration Flow

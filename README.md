@@ -66,9 +66,10 @@ git clone https://github.com/tamzid958/forgeplan.git ~/.claude/skills/forgeplan
 
 ### Option C: MCP Server (any MCP client — Claude Code, Cursor, Windsurf, Continue)
 
-Install via npm:
+Install via GitHub Packages:
 
 ```bash
+echo "@forgeplan:registry=https://npm.pkg.github.com" >> .npmrc
 npm install -g @forgeplan/mcp-server
 ```
 
@@ -79,19 +80,6 @@ Then add to your client config (e.g., `.mcp.json`, `~/.claude/settings.json`, `.
   "mcpServers": {
     "forgeplan": {
       "command": "forgeplan-mcp"
-    }
-  }
-}
-```
-
-Or use `npx` without installing:
-
-```json
-{
-  "mcpServers": {
-    "forgeplan": {
-      "command": "npx",
-      "args": ["-y", "@forgeplan/mcp-server"]
     }
   }
 }
