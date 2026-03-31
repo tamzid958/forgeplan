@@ -259,7 +259,7 @@ Also check `logs/run-summary.jsonl` for a previous entry for this WP. If a previ
 
 1. Read the project's `CLAUDE.md` for conventions (from this layer's repo root)
 2. Read the target layer's directory structure to understand patterns
-3. Read the generation rules from `${CLAUDE_SKILL_DIR}/prompts/`:
+3. Read the generation rules from `${CLAUDE_SKILL_DIR}/prompts/generation/`:
    a. **Always read `_base.md` first** — shared rules for all WP types
    b. Then read the type-specific delta file (inherits `_base.md`):
       - Bug → `bug-rules.md`

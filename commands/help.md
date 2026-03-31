@@ -37,6 +37,13 @@ forgeplan — Forge Code from Plans
                           assigned WPs first, then unassigned.
                           Lets you pick which to process.
 
+  breakdown <EPIC_ID>     Decompose an Epic into work items
+  [--dry-run]             Analyzes the Epic description and breaks it
+                          into Tasks, SubTasks, and Bugs. Presents
+                          the breakdown for review, then creates
+                          child WPs in OpenProject on approval.
+                          --dry-run: preview breakdown without creating.
+
   init                    Interactive project setup
                           Configures OpenProject connection, detects
                           layers, toolchain, hooks, and status mappings.
@@ -102,6 +109,8 @@ forgeplan — Forge Code from Plans
   /forgeplan list --sprint "S-12"  # show WPs for sprint S-12
   /forgeplan batch 100,101,102     # process three WPs
   /forgeplan queue                 # auto-discover ready WPs
+  /forgeplan breakdown 16461       # break Epic into Tasks/SubTasks/Bugs
+  /forgeplan breakdown 16461 --dry-run  # preview breakdown only
   /forgeplan rollback 16549        # undo generation
   /forgeplan init                  # set up project
   /forgeplan doctor                # health check

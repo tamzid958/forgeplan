@@ -108,7 +108,7 @@ Forgeplan ships two interfaces to the same pipeline. Use whichever fits your edi
 | **Code generation** | Claude Code writes files directly | Client LLM writes files; server handles everything else |
 | **Publish** | N/A | `npm publish` via GitHub Actions |
 
-Both share the same config files (`forgeplan.config.json`, `forgeplan.local.json`, `.env`), the same generation rules (`prompts/`), and the same git/OpenProject workflow.
+Both share the same config files (`forgeplan.config.json`, `forgeplan.local.json`, `.env`), the same generation rules (`prompts/generation/`), breakdown rules (`prompts/breakdown/`), and the same git/OpenProject workflow.
 
 ---
 
@@ -333,7 +333,7 @@ Forgeplan applies type-specific rules based on the WP type:
 | **User Story** | User-facing behavior |
 | **Subtask** | Scoped to subtask boundaries only |
 
-Rules are in `prompts/`. Customize them to change generation behavior.
+Rules are in `prompts/generation/`. Customize them to change generation behavior.
 
 ---
 
@@ -350,15 +350,24 @@ forgeplan/
     init.md                       # Interactive project setup + discovery
     rollback.md                   # Undo a generation (multi-layer)
     doctor.md                     # Health check
+    breakdown.md                  # Decompose Epic into Tasks/Stories/SubTasks/Bugs
     help.md                       # Command reference
   prompts/
-    _base.md                      # Shared generation rules (all types)
-    task-rules.md                 # Default generation rules
-    bug-rules.md                  # Bug fix rules
-    feature-rules.md              # Feature rules
-    epic-rules.md                 # Epic/scaffold rules
-    story-rules.md                # User story rules
-    subtask-rules.md              # Subtask rules
+    generation/                   # Code generation rules (used by wp/batch/queue)
+      _base.md                    # Shared generation rules (all types)
+      task-rules.md               # Default generation rules
+      bug-rules.md                # Bug fix rules
+      feature-rules.md            # Feature rules
+      epic-rules.md               # Epic/scaffold rules
+      story-rules.md              # User story rules
+      subtask-rules.md            # Subtask rules
+    breakdown/                    # Work item writing rules (used by breakdown)
+      _base.md                    # Shared decomposition rules + project context scan
+      epic-writing.md             # Epic validation + layer impact analysis
+      task-writing.md             # Task writing structure
+      story-writing.md            # User Story writing structure
+      subtask-writing.md          # SubTask writing structure
+      bug-writing.md              # Bug writing structure
   mcp-server/                     # MCP server (for Cursor, Windsurf, Continue, etc.)
     package.json                  # @tamzid958/forgeplan-mcp-server — published to npm
     bin/forgeplan-mcp.ts          # stdio entry point

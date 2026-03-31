@@ -1,7 +1,7 @@
 ---
 name: forgeplan
-description: "Forge Code from Plans — Turn OpenProject work packages into production code. Process WPs, manage git workflow, create PRs, and update OpenProject."
-argument-hint: "<command> [args] — commands: wp <ID> [--dry-run], list [<ID>|--sprint <name>], batch <ID,ID>, queue, init, rollback <ID>, doctor, help"
+description: "Forge Code from Plans — Turn OpenProject work packages into production code. Break down Epics into Tasks/SubTasks/Bugs, process WPs, manage git workflow, create PRs, and update OpenProject."
+argument-hint: "<command> [args] — commands: wp <ID> [--dry-run], list [<ID>|--sprint <name>], batch <ID,ID>, queue, breakdown <EPIC_ID> [--dry-run], init, rollback <ID>, doctor, help"
 ---
 
 # Forgeplan — OpenProject to Code Pipeline
@@ -19,6 +19,7 @@ Parse the first word of `$ARGUMENTS`:
 | `list <ID>` | Show WP details with hierarchy — read `commands/list.md` |
 | `batch <ID,ID,ID>` | Process multiple WPs — read `commands/batch.md` |
 | `queue` | Auto-discover ready WPs — read `commands/queue.md` |
+| `breakdown <EPIC_ID> [--dry-run]` | Decompose an Epic into Tasks, SubTasks, and Bugs — read `commands/breakdown.md` |
 | `init` | Interactive project setup — read `commands/init.md` |
 | `rollback <ID>` | Undo a generation — read `commands/rollback.md` |
 | `doctor` | Health check — read `commands/doctor.md` |
@@ -204,7 +205,7 @@ Before claiming any WP (Step 6 in `commands/wp.md`), you MUST run the quality ga
 - Assumptions carry through to code generation (Step 8b) and appear in the PR body (Step 8h)
 - Never update the WP description in OpenProject unless the user explicitly asks
 
-The generation rules in `prompts/` each have a "Using Clarification Context" section that explains how to apply the user's answers during code generation.
+The generation rules in `prompts/generation/` each have a "Using Clarification Context" section that explains how to apply the user's answers during code generation.
 
 ## Security Rules
 
