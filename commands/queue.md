@@ -4,7 +4,7 @@ Find work packages ready for processing, prioritizing those assigned to the curr
 
 ## Step 1: Load Configuration
 
-Load `.env`, `forgeplan.config.json`, and `forgeplan.local.json` as described in SKILL.md. Extract `pickup_status` from `statuses`.
+Load config from `.claude/forgeplan/` as described in SKILL.md. Extract `pickup_status` from `statuses`.
 
 ## Step 2: Query OpenProject (Assigned First)
 

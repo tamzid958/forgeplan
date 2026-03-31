@@ -47,7 +47,7 @@ forgeplan — Forge Code from Plans
   init                    Interactive project setup
                           Configures OpenProject connection, detects
                           layers, toolchain, hooks, and status mappings.
-                          Creates forgeplan.config.json + forgeplan.local.json.
+                          Creates .claude/forgeplan/ config files.
 
   rollback <ID>           Undo a previous generation
                           Closes PR(s), deletes branch(es), reverts
@@ -62,6 +62,8 @@ forgeplan — Forge Code from Plans
 
   CONFIG FILES
   ────────────────────────────────────────────────────────────────────
+
+  All config lives under .claude/forgeplan/:
 
   .env                    Secrets only (OP_API_KEY). Gitignored.
   forgeplan.config.json   Shared project config. Committed to git.

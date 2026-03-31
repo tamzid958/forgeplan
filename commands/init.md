@@ -9,7 +9,7 @@ Ask the user for:
 2. **OpenProject API key** — tell them: "Log in → Avatar → My account → Access tokens → Generate → API"
 3. **Default project slug** (from the OpenProject URL)
 
-Write `.env` with only the secret:
+Create the `.claude/forgeplan/` directory if it doesn't exist, then write `.claude/forgeplan/.env` with only the secret:
 ```
 OP_API_KEY=<key>
 ```
@@ -23,7 +23,7 @@ curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" "${OP_BASE_U
 
 Extract `id` and `name`. Show the user: "Detected user: **{name}** (ID: {id}). WPs will be assigned to this user."
 
-Store the user ID as `openproject.assigneeUserId` in `forgeplan.local.json` (not the shared config — this is machine/user-specific).
+Store the user ID as `openproject.assigneeUserId` in `.claude/forgeplan/forgeplan.local.json` (not the shared config — this is machine/user-specific).
 
 > **Why not `/api/v3/users/me`?** OpenProject silently ignores `/api/v3/users/me` in PATCH assignee updates on some instances. Using the explicit numeric ID is reliable.
 
@@ -137,7 +137,9 @@ Store results in `layerOverrides.<name>`.
 
 ## Step 4: Write Config Files
 
-### forgeplan.config.json (shared, committed)
+All config files live under `.claude/forgeplan/` in the project root.
+
+### .claude/forgeplan/forgeplan.config.json (shared, committed)
 
 Assemble from Steps 1–3:
 ```json
@@ -161,12 +163,12 @@ Assemble from Steps 1–3:
 
 Ask the user: "Would you like to configure keyword-based routing? (For when WPs don't have a category set)" If yes, for each layer ask for 3–5 keywords that indicate that layer (e.g., "api, endpoint, controller" for backend).
 
-### forgeplan.local.json (machine-specific, gitignored)
+### .claude/forgeplan/forgeplan.local.json (machine-specific, gitignored)
 
 Assemble from Steps 1b, 3b–3d:
 ```json
 {
-  "openproject": { "assigneeUserId": <user_id> },
+  "userId": <user_id>,
   "toolPaths": { ... },
   "hookConventions": { ... },
   "layerOverrides": { ... }
@@ -188,8 +190,8 @@ If missing, analyze the codebase and generate a `CLAUDE.md` with:
 
 ### .gitignore
 Ensure these are in `.gitignore`:
-- `.env`
-- `forgeplan.local.json`
+- `.claude/forgeplan/.env`
+- `.claude/forgeplan/forgeplan.local.json`
 - `logs/`
 
 ## Step 6: OpenProject Status Mapping
@@ -209,22 +211,25 @@ curl -s -u "apikey:${OP_API_KEY}" -H "Accept: application/hal+json" "${OP_BASE_U
 4. Based on the status names, suggest mappings:
    - `pickup_status` — the "ready/todo" status
    - `in_progress_status` — the "in progress" status
-   - `success_status` — the "in review" or "done" status
+   - `success_status` — the "in review" or "done" status (PR created, checks passed)
    - `partial_status` — the "in progress" status (or similar)
    - `failure_status` — 0 for no change, or a specific status
+   - `review_status` — the "in review" status (PR approved, awaiting merge)
+   - `merged_status` — the "done/closed" status (PR merged)
+   - `closed_status` — 0 for no change, or a status for closed-without-merge PRs
 
 5. Ask the user to confirm or override each mapping
 
-6. Merge the `statuses` section into `forgeplan.config.json`
+6. Merge the `statuses` section into `.claude/forgeplan/forgeplan.config.json`
 
 ## Done
 
 Print a summary of everything created and next steps:
 ```
-✓ forgeplan.config.json — shared project config
-✓ forgeplan.local.json  — local toolchain + hooks
-✓ .env                  — API key (gitignored)
-✓ .gitignore            — updated
+✓ .claude/forgeplan/forgeplan.config.json — shared project config
+✓ .claude/forgeplan/forgeplan.local.json  — local toolchain + hooks
+✓ .claude/forgeplan/.env                  — API key (gitignored)
+✓ .gitignore                              — updated
 
 Next steps:
   /forgeplan doctor     # verify setup

@@ -18,7 +18,7 @@ At least one of `gh`/`glab` must be present.
 
 ## Check 2: Config Validation
 
-### forgeplan.config.json
+### .claude/forgeplan/forgeplan.config.json
 - If missing: ✗ FAIL — "Run `/forgeplan init` to create config"
 - If present: validate JSON syntax, then check required fields:
   - `openproject.url` — non-empty string
@@ -29,17 +29,17 @@ At least one of `gh`/`glab` must be present.
   - `statuses.in_progress_status` and `statuses.success_status` — non-zero integers
 - Report each field as ✓ or ✗ with reason
 
-### forgeplan.local.json
+### .claude/forgeplan/forgeplan.local.json
 - If missing: ⚠ WARN — "Run `/forgeplan init` to detect toolchain and hooks"
 - If present: validate JSON syntax
 
-### .env
+### .claude/forgeplan/.env
 - If `OP_API_KEY` is empty or unset: ✗ FAIL
 - If set: ✓ (never print the value)
 
 ## Check 3: Toolchain
 
-For each tool referenced in `toolPaths` (from `forgeplan.local.json`) or required by layers' `techStack`:
+For each tool referenced in `toolPaths` (from `.claude/forgeplan/forgeplan.local.json`) or required by layers' `techStack`:
 
 1. Resolve the path (config override → `command -v` → common paths)
 2. If found: ✓ with version output
@@ -76,11 +76,11 @@ For each layer, determine its repo root (`layerOverrides.<name>.repoRoot` or pro
 2. Check it's inside a git repo: `git -C <path> rev-parse`
 3. Check the remote exists: `git -C <path> remote get-url origin`
 4. Check `CLAUDE.md` exists in the repo root: ✓ or ⚠ WARN
-5. Check `.env` and `forgeplan.local.json` are in `.gitignore`: ✓ or ⚠ WARN
+5. Check `.claude/forgeplan/.env` and `.claude/forgeplan/forgeplan.local.json` are in `.gitignore`: ✓ or ⚠ WARN
 
 ## Check 6: Hook Conventions
 
-If `hookConventions.manager` is set in `forgeplan.local.json`:
+If `hookConventions.manager` is set in `.claude/forgeplan/forgeplan.local.json`:
 
 1. Verify the manager is installed: `command -v <manager>`
 2. Verify the config file exists: `hookConventions.configFile`
@@ -108,9 +108,9 @@ Print a table:
 forgeplan doctor
 ═══════════════════════════════════════════
   Dependencies     ✓ curl, jq, git, gh
-  Config (shared)  ✓ forgeplan.config.json
-  Config (local)   ✓ forgeplan.local.json
-  API Key          ✓ loaded from .env
+  Config (shared)  ✓ .claude/forgeplan/forgeplan.config.json
+  Config (local)   ✓ .claude/forgeplan/forgeplan.local.json
+  API Key          ✓ loaded from .claude/forgeplan/.env
   Toolchain        ✓ dotnet (v10.0), node (v22.0)
   OpenProject      ✓ connected to my-project
   Repository       ✓ backend (github.com/org/backend)

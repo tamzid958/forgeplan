@@ -4,7 +4,7 @@ Process WP ID from the arguments. Parse optional `--dry-run` flag. Follow this p
 
 ## Step 1: Load Configuration
 
-Load `.env`, `forgeplan.config.json`, and `forgeplan.local.json` as described in the main SKILL.md. Validate config. Resolve tool paths.
+Load config from `.claude/forgeplan/` as described in the main SKILL.md. Validate config. Resolve tool paths.
 
 ## Step 2: Fetch Work Package
 
@@ -177,7 +177,7 @@ These assumptions will be included in the PR body (Step 8h) so reviewers can ver
 
 Using the `lockVersion` from Step 2, update the status to `in_progress_status` from config. Also claim the WP if not already assigned to the current user.
 
-**Assignee resolution:** If `openproject.assigneeUserId` is set in `forgeplan.local.json`, use `/api/v3/users/<assigneeUserId>`. Otherwise fall back to `/api/v3/users/me` (note: `/api/v3/users/me` silently fails for assignee updates on some OpenProject instances).
+**Assignee resolution:** If `userId` is set in `.claude/forgeplan/forgeplan.local.json`, use `/api/v3/users/<assigneeUserId>`. Otherwise fall back to `/api/v3/users/me` (note: `/api/v3/users/me` silently fails for assignee updates on some OpenProject instances).
 
 ```bash
 curl -s -u "apikey:${OP_API_KEY}" \

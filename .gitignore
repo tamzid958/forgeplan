@@ -1,5 +1,2 @@
 phases/
-
-# mcp-server build artifacts
-mcp-server/node_modules/
-mcp-server/dist/
+mcp-server/

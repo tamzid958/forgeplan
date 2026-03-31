@@ -66,10 +66,10 @@ git clone https://github.com/tamzid958/forgeplan.git ~/.claude/skills/forgeplan
 
 ### Option C: MCP Server (any MCP client — Claude Code, Cursor, Windsurf, Continue)
 
-Install via GitHub Packages:
+Install from npm:
 
 ```bash
-npm install -g git+https://github.com/tamzid958/forgeplan.git#mcp-server
+npm install -g forgeplan-mcp-server
 ```
 
 Then add to your client config (e.g., `.mcp.json`, `~/.claude/settings.json`, `.cursor/mcp.json`):
@@ -102,13 +102,13 @@ Forgeplan ships two interfaces to the same pipeline. Use whichever fits your edi
 | | Claude Code Skill | MCP Server |
 |---|---|---|
 | **Client** | Claude Code only | Any MCP client (Claude Code, Cursor, Windsurf, Continue) |
-| **Install** | `git clone` into `.claude/skills/` | `npm install -g @tamzid958/forgeplan-mcp-server` |
+| **Install** | `git clone` into `.claude/skills/` | `npm install -g forgeplan-mcp-server` |
 | **Invoke** | `/forgeplan wp 42` | Natural language: "Process work package #42" |
 | **Transport** | Runs inside Claude Code session | stdio subprocess (local, no HTTP) |
 | **Code generation** | Claude Code writes files directly | Client LLM writes files; server handles everything else |
-| **Publish** | N/A | `npm publish` via GitHub Actions |
+| **Publish** | N/A | `npm publish` to npmjs.org |
 
-Both share the same config files (`forgeplan.config.json`, `forgeplan.local.json`, `.env`), the same generation rules (`prompts/generation/`), breakdown rules (`prompts/breakdown/`), and the same git/OpenProject workflow.
+Both share the same config files (under `.claude/forgeplan/`), the same generation rules (`prompts/generation/`), breakdown rules (`prompts/breakdown/`), and the same git/OpenProject workflow.
 
 ---
 
@@ -216,11 +216,11 @@ Checks dependencies, config files, toolchain, OpenProject connectivity, git repo
 
 | File | Purpose | Git |
 |------|---------|-----|
-| `forgeplan.config.json` | Shared project config (layers, routing, statuses, reviewers) | Committed |
-| `forgeplan.local.json` | Machine-specific (toolPaths, hookConventions, layer overrides) | Gitignored |
-| `.env` | Secrets only (`OP_API_KEY`) | Gitignored |
+| `.claude/forgeplan/forgeplan.config.json` | Shared project config (layers, routing, statuses, reviewers) | Committed |
+| `.claude/forgeplan/forgeplan.local.json` | Machine-specific (toolPaths, hookConventions, layer overrides) | Gitignored |
+| `.claude/forgeplan/.env` | Secrets only (`OP_API_KEY`) | Gitignored |
 
-`forgeplan.local.json` is deep-merged on top of `forgeplan.config.json` at load time. The `init` command generates both files.
+`forgeplan.local.json` is deep-merged on top of `forgeplan.config.json` at load time. The `init` command generates both files under `.claude/forgeplan/`.
 
 ### forgeplan.config.json
 
@@ -368,19 +368,6 @@ forgeplan/
       story-writing.md            # User Story writing structure
       subtask-writing.md          # SubTask writing structure
       bug-writing.md              # Bug writing structure
-  mcp-server/                     # MCP server (for Cursor, Windsurf, Continue, etc.)
-    package.json                  # @tamzid958/forgeplan-mcp-server — published to npm
-    bin/forgeplan-mcp.ts          # stdio entry point
-    src/
-      index.ts                    # Server setup + tool/resource/prompt registration
-      config/                     # Config types, loader, validator
-      openproject/                # OP API client + quality gate
-      routing/                    # 4-tier layer routing
-      git/                        # Branch naming, operations, PR create/close
-      tools/                      # 19 MCP tools (config, WP, git, pipeline)
-      resources/                  # 3 MCP resources (rules, config, log)
-      prompts/                    # 2 MCP prompts (process_work_package, review)
-      util/                       # exec (no shell), deep-merge, JSONL logger
   forgeplan.config.json.example   # Shared config template
   forgeplan.local.json.example    # Local config template
   README.md
@@ -409,16 +396,16 @@ forgeplan/
 ## Troubleshooting
 
 ### "OP_API_KEY not found"
-Create a `.env` file with your API key, or run `/forgeplan init`.
+Create `.claude/forgeplan/.env` with your API key, or run `/forgeplan init`.
 
 ### "forgeplan.config.json not found"
-Run `/forgeplan init` to generate it.
+Run `/forgeplan init` to generate it under `.claude/forgeplan/`.
 
 ### "forgeplan.local.json not found"
 Run `/forgeplan init` to detect toolchain and hook conventions.
 
 ### "Tool 'dotnet' not found"
-The tool isn't on PATH. Set `toolPaths.dotnet` in `forgeplan.local.json` or run `/forgeplan init` to re-detect.
+The tool isn't on PATH. Set `toolPaths.dotnet` in `.claude/forgeplan/forgeplan.local.json` or run `/forgeplan init` to re-detect.
 
 ### "Cannot reach OpenProject"
 Check `openproject.url` in `forgeplan.config.json`. Verify the server is reachable.

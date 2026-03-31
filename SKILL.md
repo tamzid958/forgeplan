@@ -33,7 +33,7 @@ Before executing any command (except `init` and `doctor`), load configuration:
 
 ### Step 1: Read `.env`
 ```bash
-source .env 2>/dev/null
+source .claude/forgeplan/.env 2>/dev/null
 ```
 Verify `OP_API_KEY` is loaded and non-empty. NEVER print its value.
 
@@ -41,12 +41,12 @@ Verify `OP_API_KEY` is loaded and non-empty. NEVER print its value.
 
 **Primary config** (committed, shared):
 ```bash
-cat forgeplan.config.json
+cat .claude/forgeplan/forgeplan.config.json
 ```
 
 **Local config** (gitignored, machine-specific):
 ```bash
-cat forgeplan.local.json 2>/dev/null
+cat .claude/forgeplan/forgeplan.local.json 2>/dev/null
 ```
 
 Deep-merge `forgeplan.local.json` on top of `forgeplan.config.json`:

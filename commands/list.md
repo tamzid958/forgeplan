@@ -7,7 +7,7 @@ Display work packages from OpenProject. Two modes based on arguments:
 
 ## Step 1: Load Configuration
 
-Load `.env`, `forgeplan.config.json`, and `forgeplan.local.json` as described in SKILL.md.
+Load config from `.claude/forgeplan/` as described in SKILL.md.
 
 ---
 

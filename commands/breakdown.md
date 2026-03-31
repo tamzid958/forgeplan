@@ -11,7 +11,7 @@ Break down an Epic work package into structured Tasks, SubTasks, and Bugs using 
 
 ## Step 1: Load Configuration
 
-Load `.env`, `forgeplan.config.json`, and `forgeplan.local.json` as described in SKILL.md. Validate config. Resolve tool paths.
+Load config from `.claude/forgeplan/` as described in SKILL.md. Validate config. Resolve tool paths.
 
 ## Step 2: Scan Project Context
 
@@ -23,7 +23,7 @@ Read the breakdown rules from `${CLAUDE_SKILL_DIR}/prompts/breakdown/`:
 
 Follow the **Project Context Scan** procedure from `_base.md`:
 - Read `CLAUDE.md` from project root and each layer root
-- Read `forgeplan.config.json` for layer definitions and routing
+- Read `.claude/forgeplan/forgeplan.config.json` for layer definitions and routing
 - Scan directory structures per layer (top 3 levels)
 - Identify existing patterns: API routes, models, components, tests
 - Check dependency manifests (`package.json`, `*.csproj`, `go.mod`, etc.)
@@ -229,14 +229,12 @@ curl -s -u "apikey:${OP_API_KEY}" \
   -H "Accept: application/hal+json" \
   -X POST \
   --data '{
+    "type": "follows",
     "_links": {
-      "from": { "href": "/api/v3/work_packages/${DEPENDENT_ID}" },
       "to": { "href": "/api/v3/work_packages/${DEPENDENCY_ID}" }
-    },
-    "_type": "Relation",
-    "type": "follows"
+    }
   }' \
-  "${OP_BASE_URL}/api/v3/relations"
+  "${OP_BASE_URL}/api/v3/work_packages/${DEPENDENT_ID}/relations"
 ```
 
 ## Step 11: Post Summary and Report

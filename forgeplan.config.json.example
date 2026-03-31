@@ -39,7 +39,10 @@
     "in_progress_status": null,
     "success_status": null,
     "partial_status": null,
-    "failure_status": null
+    "failure_status": null,
+    "review_status": null,
+    "merged_status": null,
+    "closed_status": null
   },
   "commitTrailer": null
 }
