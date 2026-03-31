@@ -69,8 +69,7 @@ git clone https://github.com/tamzid958/forgeplan.git ~/.claude/skills/forgeplan
 Install via GitHub Packages:
 
 ```bash
-echo "@tamzid958:registry=https://npm.pkg.github.com" >> .npmrc
-npm install -g @tamzid958/forgeplan-mcp-server
+npm install -g git+https://github.com/tamzid958/forgeplan.git#mcp-server
 ```
 
 Then add to your client config (e.g., `.mcp.json`, `~/.claude/settings.json`, `.cursor/mcp.json`):
