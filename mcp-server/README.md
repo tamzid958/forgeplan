@@ -11,9 +11,7 @@ A Model Context Protocol server that exposes forgeplan's deterministic operation
 ## Build
 
 ```bash
-cd mcp-server
-npm install
-npm run build
+npm install -g git+https://github.com/tamzid958/forgeplan.git#mcp-server
 ```
 
 ## Client Configuration
